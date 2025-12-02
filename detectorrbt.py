@@ -4,25 +4,38 @@ import threading
 import os
 import shutil
 import torch
+import logging
 from ultralytics import YOLO
 
 from camera_processor import CameraProcessor
-from bytetrck_detector import ByteTrackDetector
+from bytetrack_detector import ByteTrackDetector
 
 
 def main():
+	# Configura logging para arquivo (modo 'w' sobrescreve o arquivo a cada execução)
+	log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
+	logging.basicConfig(
+		level=logging.INFO,
+		format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+		handlers=[
+			logging.FileHandler(log_file, mode='w', encoding='utf-8'),
+			logging.StreamHandler()  # Mantém output no console também
+		]
+	)
+	logger = logging.getLogger(__name__)
+	
 	# Limpa o diretório de imagens antes de iniciar
 	imagens_dir = os.path.join(os.path.dirname(__file__), "imagens")
 	if os.path.exists(imagens_dir):
 		try:
 			shutil.rmtree(imagens_dir)
-			print(f"[main] Diretório '{imagens_dir}' removido.")
+			logger.info(f"Diretório '{imagens_dir}' removido.")
 		except Exception as e:
-			print(f"[main] Aviso: não foi possível remover '{imagens_dir}': {e}")
+			logger.warning(f"Não foi possível remover '{imagens_dir}': {e}")
 	
 	# Recria o diretório vazio
 	os.makedirs(imagens_dir, exist_ok=True)
-	print(f"[main] Diretório '{imagens_dir}' criado.")
+	logger.info(f"Diretório '{imagens_dir}' criado.")
 	
 	cfg_path = os.path.join(os.path.dirname(__file__), "config.yaml")
 	if not os.path.exists(cfg_path):
@@ -54,8 +67,9 @@ def main():
 		if YOLO is not None:
 			try:
 				yolo_model = YOLO(weights)
+				logger.info(f"Modelo YOLO carregado: {weights}")
 			except Exception as e:
-				print(f"[main] warning: unable to load YOLO weights '{weights}': {e}")
+				logger.warning(f"Não foi possível carregar o modelo YOLO '{weights}': {e}")
 				yolo_model = None
 	except Exception:
 		yolo_model = None
@@ -66,7 +80,7 @@ def main():
 		# aceitar chave `url` ou compatibilidade retroativa com `source`
 		cam_url = cam.get("url") or cam.get("source")
 		if cam_id is None or cam_url is None:
-			print(f"[main] câmera inválida no config: {cam}")
+			logger.warning(f"Câmera inválida no config: {cam}")
 			continue
 
 		p = ByteTrackDetector(
@@ -89,7 +103,7 @@ def main():
 		while True:
 			time.sleep(1)
 	except KeyboardInterrupt:
-		print("[main] recebida interrupção, finalizando...")
+		logger.info("Interrupção recebida, finalizando...")
 		for p in processors:
 			p.stop()
 		for p in processors:
