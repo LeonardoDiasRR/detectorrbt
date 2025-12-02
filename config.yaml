@@ -1,0 +1,36 @@
+gpu_index: 0
+
+cpu_batch: 4
+gpu_batch: 32
+
+# Limite de frames sem detecção para considerar o objeto perdido
+max_frames_lost: 30
+
+# Intervalo de reconexão em segundos em caso de falha na conexão de um stream
+reconnect_interval: 5
+
+# Número máximo de tentativas de reconexão antes de desistir
+max_reconnect_attempts: 10
+
+# Modelo de detecção facial
+face_detection_model: "yolov8n-face.pt"
+
+# Modelo de rastreamento
+tracker: "bytetrack.yaml"
+
+# Exibir na tela
+show: true
+
+# Pesos na escolha da melhor face do track
+qualidade_face:
+  tamanho_bbox: 2
+  face_frontal: 4
+
+
+cameras:
+  - id: 1
+    source: "rtsp://findface:Mitra2021@10.95.7.24:7001/022cdcf4-b31d-f379-c2d8-b4e727f8a148"
+    name: "Camera 1"
+  # - id: 2
+  #   source: "rtsp://findface:Mitra2021@10.95.7.24:7001/022cdcf4-b31d-f379-c2d8-b4e727f8a148"
+  #   name: "Camera 2"
