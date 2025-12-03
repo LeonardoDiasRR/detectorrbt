@@ -7,21 +7,23 @@ import torch
 import logging
 from ultralytics import YOLO
 
+# Configura logging ANTES de importar outros módulos
+log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
+logging.basicConfig(
+	level=logging.INFO,
+	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+	handlers=[
+		logging.FileHandler(log_file, mode='w', encoding='utf-8'),
+		logging.StreamHandler()  # Mantém output no console também
+	],
+	force=True  # Força reconfiguração mesmo se já foi chamado
+)
+
 from camera_processor import CameraProcessor
 from bytetrack_detector import ByteTrackDetector
 
 
 def main():
-	# Configura logging para arquivo (modo 'w' sobrescreve o arquivo a cada execução)
-	log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
-	logging.basicConfig(
-		level=logging.INFO,
-		format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-		handlers=[
-			logging.FileHandler(log_file, mode='w', encoding='utf-8'),
-			logging.StreamHandler()  # Mantém output no console também
-		]
-	)
 	logger = logging.getLogger(__name__)
 	
 	# Limpa o diretório de imagens antes de iniciar
@@ -92,11 +94,10 @@ def main():
 			show=show,
 			)
 
-		# p = CameraProcessor(camera_id=cam_id, camera_name=cam_name, source=cam_url,
-		# 			yolo_model=yolo_model, device_type=device_type, batch_size=batch_size, config=cfg)
-
-		p.start()
-		processors.append(p)
+		# Cria e inicia thread explicitamente
+		thread = threading.Thread(target=p.start, daemon=True)
+		thread.start()
+		processors.append((p, thread))
 
 	try:
 		# keep main thread alive
@@ -104,10 +105,10 @@ def main():
 			time.sleep(1)
 	except KeyboardInterrupt:
 		logger.info("Interrupção recebida, finalizando...")
-		for p in processors:
+		for p, thread in processors:
 			p.stop()
-		for p in processors:
-			p.join(timeout=5)
+		for p, thread in processors:
+			thread.join(timeout=5)
 
 
 if __name__ == "__main__":

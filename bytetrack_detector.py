@@ -3,7 +3,7 @@ from ultralytics import YOLO
 import cv2
 import time
 import logging
-from threading import Thread
+from face_quality_score import get_face_quality_score
 
 
 class ByteTrackDetector:
@@ -19,6 +19,8 @@ class ByteTrackDetector:
             batch=4,
             show=True,
             stream=True,
+            conf=0.3,
+            iou=0.5
             ):
         self.source = source
         self.model = yolo_model
@@ -28,48 +30,80 @@ class ByteTrackDetector:
         self.batch = batch
         self.show = show
         self.stream = stream
-        self.conf = 0.3
-        self.iou = 0.5
+        self.conf = conf
+        self.iou = iou
         self.running = False
-        self.thread = None
         self.logger = logging.getLogger(f"ByteTrackDetector_{camera_id}_{camera_name}")
 
     def start(self):
-        """Inicia o processamento em uma thread separada"""
+        """Inicia o processamento diretamente (sem thread interna)"""
         self.running = True
-        self.thread = Thread(target=self._process_stream, daemon=True)
-        self.thread.start()
         self.logger.info(f"ByteTrackDetector iniciado")
+        self._process_stream()
 
     def stop(self):
         """Para o processamento"""
         self.running = False
-        if self.thread:
-            self.thread.join(timeout=5)
         self.logger.info(f"ByteTrackDetector finalizado")
 
     def join(self, timeout=None):
-        """Aguarda a thread finalizar"""
-        if self.thread:
-            self.thread.join(timeout=timeout)
+        """Método mantido para compatibilidade (não faz nada pois não há thread interna)"""
+        pass
 
     def _process_stream(self):
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
         while self.running:
             try:
                 # Usar stream=True para fontes contínuas e permitir reconexão em caso de falha
-                for _res in self.model.track(
+                for result in self.model.track(
                     source=self.source,
-                    tracker=self.tracker,  # Usar ByteTrack para rastreamento
-                    persist=True,             # Manter IDs de rastreamento consistentes
-                    conf=self.conf,           # Limite de confiança
-                    iou=self.iou,             # Limite de IoU
-                    show=self.show,           # Mostrar a saída em tempo real (requer OpenCV)
-                    stream=self.stream,       # ITERAR sobre frames contínuos
+                    tracker=self.tracker, # Usar ByteTrack para rastreamento
+                    persist=True,  # Manter IDs de rastreamento consistentes
+                    conf=self.conf,  # Limite de confiança
+                    iou=self.iou,  # Limite de IoU
+                    show=self.show,  # Mostrar a saída em tempo real (requer OpenCV)
+                    stream=self.stream,  # ITERAR sobre frames contínuos
                     batch=self.batch
                 ):
                     if not self.running:
                         break
+                    
+                    # Acessa o frame original
+                    frame = result.orig_img  # numpy array (H, W, C)
+                    
+                    # Acessa as detecções com track IDs
+                    if result.boxes is not None and result.boxes.id is not None:
+                        for i, box in enumerate(result.boxes):
+                            track_id = int(box.id[0])  # Track ID do ByteTrack
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])  # Coordenadas do bbox
+                            confidence = float(box.conf[0])  # Confiança da detecção
+                            class_id = int(box.cls[0])  # ID da classe
+                            
+                            # Acessa landmarks faciais (se disponíveis)
+                            landmarks = None
+                            if result.keypoints is not None and len(result.keypoints) > i:
+                                # Keypoints vem como tensor [N, num_keypoints, 2 ou 3]
+                                # onde N é o número de detecções
+                                # Para yolov8n-face.pt geralmente são 5 pontos: [olho_esq, olho_dir, nariz, boca_esq, boca_dir]
+                                kpts = result.keypoints[i].xy[0].cpu().numpy()  # [num_keypoints, 2]
+                                landmarks = kpts
+                            
+                            # Calcula o score de qualidade da face
+                            bbox_tuple = (x1, y1, x2, y2)
+                            quality_score = get_face_quality_score(
+                                bbox=bbox_tuple,
+                                confidence=confidence,
+                                frame=frame,
+                                landmarks=landmarks
+                            )
+                            
+                            # Crop da face do frame
+                            face_crop = frame[y1:y2, x1:x2]
+                            
+                            self.logger.info(
+                                f"Track {track_id}: bbox({x1},{y1},{x2},{y2}), "
+                                f"conf={confidence:.2f}, quality_score={quality_score:.4f}"
+                            )
+
             except KeyboardInterrupt:
                 self.logger.info("Execução interrompida pelo usuário.")
                 break
@@ -82,5 +116,5 @@ if __name__ == "__main__":
     # Formato típico: "rtsp://username:password@ip_address:port/path_to_stream"
     # Exemplo genérico abaixo. Substitua pelos seus dados reais.
     RTSP_URL = "rtsp://findface:Mitra2021@10.95.7.24:7001/022cdcf4-b31d-f379-c2d8-b4e727f8a148"
-    detector = ByteTrackDetector(source=RTSP_URL)
-    detector.start_detection()
+    detector = ByteTrackDetector(source=RTSP_URL, camera_id=1, camera_name="Camera_RTSP", yolo_model=YOLO("yolov8n-face.pt"), show=True)
+    detector.start()

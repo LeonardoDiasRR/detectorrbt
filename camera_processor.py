@@ -10,8 +10,6 @@ import numpy as np
 from ultralytics import YOLO
 from face_quality_score import get_face_quality_score
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
 class CameraProcessor:
     def __init__(
         self,
