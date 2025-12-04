@@ -1,22 +1,25 @@
+# Índice da GPU a ser utilizada
 gpu_index: 0
 
-cpu_batch: 4
-gpu_batch: 32
+# Tamanho do lote de processamento de detecções para CPU e GPU
+cpu_batch_size: 4
+gpu_batch_size: 32
 
 # Limite de frames sem detecção para considerar o objeto perdido
 max_frames_lost: 30
-
-# Intervalo de reconexão em segundos em caso de falha na conexão de um stream
-reconnect_interval: 5
-
-# Número máximo de tentativas de reconexão antes de desistir
-max_reconnect_attempts: 10
 
 # Modelo de detecção facial
 face_detection_model: "yolov8n-face.pt"
 
 # Modelo de rastreamento
-tracker: "bytetrack.yaml"
+# Opções:
+## bytetrack.yaml <- mais rápido
+## deep_sort.yaml <- mais preciso
+tracker: "bytetrack.yaml"  
+
+# Confiança mínima para considerar uma detecção válida
+conf: 0.1  # Valor padrão: 0.1 igual o do algoritmo ByteTrack
+iou: 0.2 # Mais permissivo, mantêm o track por mais tempo
 
 # Exibir na tela
 show: true
@@ -26,7 +29,6 @@ qualidade_face:
   tamanho_bbox: 2
   face_frontal: 4
 
-
 cameras:
   - id: 1
     source: "rtsp://findface:Mitra2021@10.95.7.24:7001/022cdcf4-b31d-f379-c2d8-b4e727f8a148"
@@ -34,3 +36,5 @@ cameras:
   # - id: 2
   #   source: "rtsp://findface:Mitra2021@10.95.7.24:7001/022cdcf4-b31d-f379-c2d8-b4e727f8a148"
   #   name: "Camera 2"
+
+prefixo_grupo_camera_findface: "TESTE"

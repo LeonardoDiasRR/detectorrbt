@@ -7,15 +7,18 @@ import cv2
 import time
 import logging
 from face_quality_score import get_face_quality_score
-
+from findface_adapter import enviar_imagem_para_findface
+from findface_multi import FindfaceMulti
 
 class ByteTrackDetector:
     def __init__(
             self,
             camera_id: int,
             camera_name: str,
+            camera_token: str,
             source: str, 
-            yolo_model: Optional[YOLO], 
+            yolo_model: Optional[YOLO],
+            findface: Optional[FindfaceMulti] = None,  # Adiciona parâmetro findface
             project="./imagens/", 
             name="rtsp_byte_track_results", 
             tracker="bytetrack.yaml",  # <-- Usar configuração customizada
@@ -29,7 +32,10 @@ class ByteTrackDetector:
         self.source = source
         self.model = yolo_model
         self.project = project
+        self.camera_id = camera_id
+        self.camera_name = camera_name
         self.name = name
+        self.camera_token = camera_token
         self.tracker = tracker
         self.batch = batch
         self.show = show
@@ -38,6 +44,7 @@ class ByteTrackDetector:
         self.iou = iou
         self.running = False
         self.max_frames_lost = max_frames_lost
+        self.findface = findface  # Armazena instância do FindFace
         self.logger = logging.getLogger(f"ByteTrackDetector_{camera_id}_{camera_name}")
         
         # Estruturas para rastreamento de tracks
@@ -161,6 +168,10 @@ class ByteTrackDetector:
         # Salva a melhor face
         self._save_best_frame(track_id, best_frame, best_score, best_timestamp, best_bbox, total_detections)
         
+        # Envia para o FindFace
+        if self.findface is not None:
+            self._send_best_frame_to_findface(track_id, best_frame, best_score, best_timestamp, best_bbox, total_detections)
+        
         # Remove track da memória
         del self.active_tracks[track_id]
         del self.track_frames_lost[track_id]
@@ -200,6 +211,46 @@ class ByteTrackDetector:
             
         except Exception as e:
             self.logger.error(f"Erro ao salvar frame do track {track_id}: {e}", exc_info=True)
+
+    def _send_best_frame_to_findface(self, track_id: int, frame: np.ndarray, score: float, 
+                                     timestamp: datetime, bbox: Tuple[int, int, int, int],
+                                     total_detections: int):
+        """Envia o melhor frame do track para o FindFace"""
+        try:
+            # Converte o frame para bytes (JPEG)
+            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            imagem_bytes = buffer.tobytes()
+            
+            # Envia para o FindFace
+            resposta = enviar_imagem_para_findface(
+                findface=self.findface,
+                camera_id=self.camera_id,
+                camera_token=self.camera_token,
+                imagem_bytes=imagem_bytes,
+                bbox=bbox
+            )
+            
+            # Verifica se o envio foi bem-sucedido
+            if resposta:
+                self.logger.info(
+                    f"✓ FindFace - Envio BEM-SUCEDIDO - Track {track_id}: "
+                    f"score={score:.4f}, total_detections={total_detections}, "
+                    f"camera_id={self.camera_id}, resposta={resposta}"
+                )
+            else:
+                self.logger.warning(
+                    f"✗ FindFace - Envio retornou resposta vazia - Track {track_id}: "
+                    f"score={score:.4f}, total_detections={total_detections}, "
+                    f"camera_id={self.camera_id}"
+                )
+            
+        except Exception as e:
+            self.logger.error(
+                f"✗ FindFace - FALHA no envio - Track {track_id}: "
+                f"score={score:.4f}, total_detections={total_detections}, "
+                f"camera_id={self.camera_id}, erro={e}", 
+                exc_info=True
+            )
 
     def _finalize_all_tracks(self):
         """Finaliza todos os tracks ativos"""

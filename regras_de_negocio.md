@@ -21,8 +21,8 @@ O valor de 'gpu_index' consta no atributo 'gpu_index' do arquivo de configuraç�
 
 ### batch_size
 Em seguida, deve ler no arquivo de configuração 'config.yaml':
-- A seção 'gpu_batch', se houver suporte à GPU, OU
-- A seção 'cpu_batch', se não houver suporte à GPU
+- A seção 'gpu_batch_size', se houver suporte à GPU, OU
+- A seção 'cpu_batch_size', se não houver suporte à GPU
 
 Setar o atributo dinâmico 'batch_size' com o respectivo valor lido.
 
@@ -76,8 +76,8 @@ O frame completo (não apenas o crop da face) com o bbox desenhado deve ser salv
 # ESTRUTURA DO CONFIG.YAML ESPERADA
 ```yaml
 gpu_index: 0
-gpu_batch: 16
-cpu_batch: 4
+gpu_batch_size: 16
+cpu_batch_size: 4
 max_frames_lost: 30
 reconnect_interval: 5
 max_reconnect_attempts: 10

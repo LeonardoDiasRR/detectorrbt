@@ -1,11 +1,20 @@
-import yaml
+# built-in
 import time
 import threading
 import os
+import traceback
+from dotenv import load_dotenv
+
+# 3d party
+import yaml
 import shutil
 import torch
 import logging
 from ultralytics import YOLO
+
+# local
+from findface_multi import FindfaceMulti
+from findface_adapter import obter_lista_cameras_virtuais_findface
 
 # Configura logging ANTES de importar outros módulos
 log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
@@ -19,7 +28,6 @@ logging.basicConfig(
 	force=True  # Força reconfiguração mesmo se já foi chamado
 )
 
-from camera_processor import CameraProcessor
 from bytetrack_detector import ByteTrackDetector
 
 
@@ -51,9 +59,9 @@ def main():
 
 	# choose batch size based on GPU availability
 	if device_type.startswith("cuda"):
-		batch_size = cfg.get("gpu_batch", 32)
+		batch_size = cfg.get("gpu_batch_size", 32)
 	else:
-		batch_size = cfg.get("cpu_batch", 4)
+		batch_size = cfg.get("cpu_batch_size", 4)
 
 	show = cfg.get("show", True)
 
@@ -76,11 +84,15 @@ def main():
 	except Exception:
 		yolo_model = None
 
-	for cam in cameras:
+	
+	cameras_ff = obter_lista_cameras_virtuais_findface(ff, prefixo=cfg.get("findface_camera_prefix", "TESTE")) + cameras
+	for cam in cameras_ff:
 		cam_id = cam.get("id")
 		cam_name = cam.get("name", f"camera_{cam_id}")
 		# aceitar chave `url` ou compatibilidade retroativa com `source`
-		cam_url = cam.get("url") or cam.get("source")
+		cam_url = cam.get("url")
+		camera_token = cam.get("token")
+
 		if cam_id is None or cam_url is None:
 			logger.warning(f"Câmera inválida no config: {cam}")
 			continue
@@ -88,6 +100,7 @@ def main():
 		p = ByteTrackDetector(
 			camera_id=cam_id,
 			camera_name=cam_name,
+			camera_token=camera_token,
 			source=cam_url,
 			yolo_model=yolo_model,
 			batch=batch_size,
@@ -112,5 +125,20 @@ def main():
 
 
 if __name__ == "__main__":
-	main()
+	# Carrega variáveis de ambiente do arquivo .env
+	load_dotenv()
+	
+	try:
+		ff = FindfaceMulti(		
+			url_base=os.environ["FINDFACE_URL"],
+			user=os.environ["FINDFACE_USER"],
+			password=os.environ["FINDFACE_PASSWORD"],
+			uuid=os.environ["FINDFACE_UUID"]
+		)
 
+		main()
+		
+	except KeyError as e:
+		print(traceback.format_exc())
+	finally:
+		ff.logout()
