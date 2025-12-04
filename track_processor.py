@@ -74,12 +74,13 @@ class TrackProcessor:
             best_frame, best_score, best_timestamp, best_bbox, best_landmarks = best_data
             best_conf = None
 
-        # Salva a melhor face
-        self._save_best_frame(best_frame, best_score, best_timestamp, best_bbox, total_detections, best_conf)
-
-        # Envia para o FindFace
+        # IMPORTANTE: O frame vem limpo, fazemos uma cópia para salvar com bbox
+        # Envia para o FindFace PRIMEIRO (frame limpo)
         if self.findface is not None:
             self._send_best_frame_to_findface(best_frame, best_score, best_timestamp, best_bbox, total_detections)
+
+        # Salva a melhor face COM bbox desenhado (faz cópia internamente)
+        self._save_best_frame(best_frame, best_score, best_timestamp, best_bbox, total_detections, best_conf)
 
     def _save_best_frame(
         self,
@@ -93,7 +94,7 @@ class TrackProcessor:
         """
         Salva o frame com bbox desenhado.
 
-        :param frame: Frame numpy array.
+        :param frame: Frame numpy array (limpo, sem bbox).
         :param score: Score de qualidade da face.
         :param timestamp: Timestamp da detecção.
         :param bbox: Bounding box (x1, y1, x2, y2).
@@ -101,10 +102,13 @@ class TrackProcessor:
         :param conf: Confiança YOLO da detecção (opcional).
         """
         try:
+            # Cria uma cópia do frame para desenhar o bbox
+            frame_with_bbox = frame.copy()
+            
             x1, y1, x2, y2 = bbox
 
-            # Desenha bbox verde
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # Desenha bbox verde na cópia
+            cv2.rectangle(frame_with_bbox, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
             # Label com confiança YOLO
             if conf is not None:
@@ -114,14 +118,14 @@ class TrackProcessor:
             
             label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
             cv2.rectangle(
-                frame,
+                frame_with_bbox,
                 (x1, y1 - label_size[1] - 10),
                 (x1 + label_size[0], y1),
                 (0, 255, 0),
                 -1
             )
             cv2.putText(
-                frame,
+                frame_with_bbox,
                 label,
                 (x1, y1 - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
@@ -136,8 +140,8 @@ class TrackProcessor:
             filepath = Path(self.project) / self.name / filename
             filepath.parent.mkdir(parents=True, exist_ok=True)
 
-            # Salva
-            cv2.imwrite(str(filepath), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            # Salva a cópia com bbox
+            cv2.imwrite(str(filepath), frame_with_bbox, [cv2.IMWRITE_JPEG_QUALITY, 95])
             
             conf_str = f", conf={conf:.2f}" if conf is not None else ""
             self.logger.info(
@@ -159,14 +163,14 @@ class TrackProcessor:
         """
         Envia o melhor frame do track para o FindFace.
 
-        :param frame: Frame numpy array.
+        :param frame: Frame numpy array (limpo, sem bbox).
         :param score: Score de qualidade da face.
         :param timestamp: Timestamp da detecção.
         :param bbox: Bounding box (x1, y1, x2, y2).
         :param total_detections: Total de detecções no track.
         """
         try:
-            # Converte o frame para bytes (JPEG)
+            # Converte o frame limpo diretamente para bytes (JPEG)
             _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             imagem_bytes = buffer.tobytes()
 

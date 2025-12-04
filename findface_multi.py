@@ -1655,7 +1655,7 @@ class FindfaceMulti:
         :return: Dicionário com os dados retornados pela API.
         :raises TypeError: Se ``area_id`` não for inteiro.
         :raises RuntimeError: Se o token for inválido.
-        :raises ConnectionError: Em caso de falha de comunicação.
+        :raises ConnectionError: Em caso de falha na comunicação.
         """
 
         if not isinstance(area_id, int):
@@ -2096,15 +2096,22 @@ class FindfaceMulti:
         if camera is not None:
             data["camera"] = str(camera)
         if rotate is not None:
-            data["rotate"] = json.dumps(rotate)
+            data["rotate"] = "true" if rotate else "false"
         if timestamp is not None:
             data["timestamp"] = timestamp
-        if roi is not None:
-            data["roi"] = json.dumps(roi)
         if temperature is not None:
             data["temperature"] = str(temperature)
         if liveness is not None:
             data["liveness"] = str(liveness)
+
+        # ROI deve ser enviado como múltiplos campos com o mesmo nome
+        # Similar ao curl: -F "roi=348" -F "roi=243" -F "roi=460" -F "roi=382"
+        if roi is not None:
+            # Cria uma lista de tuplas para enviar múltiplos valores com a mesma chave
+            data_list = [(k, v) for k, v in data.items()]
+            for valor in roi:
+                data_list.append(("roi", str(valor)))
+            data = data_list
 
         try:
             response = requests.post(url, headers=headers, files=files, data=data, verify=False)

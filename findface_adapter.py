@@ -73,26 +73,3 @@ def enviar_imagem_para_findface(findface: FindfaceMulti, camera_id: int, camera_
     
     return resposta
 
-if __name__ == "__main__":
-    # Carrega variáveis de ambiente do arquivo .env
-    load_dotenv()
-    cfg_path = os.path.join(os.path.dirname(__file__), "config.yaml")
-
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f) or {}
-
-    try:
-        ff = FindfaceMulti(		
-            url_base=os.environ["FINDFACE_URL"],
-            user=os.environ["FINDFACE_USER"],
-            password=os.environ["FINDFACE_PASSWORD"],
-            uuid=os.environ["FINDFACE_UUID"]
-        )
-
-        cameras = obter_lista_cameras_virtuais_findface(ff, prefixo=cfg["prefixo_grupo_camera_findface"])
-        print(json.dumps(cameras, indent=4, ensure_ascii=False))
-        
-    except KeyError as e:
-            print(traceback.format_exc())
-    finally:
-        ff.logout()
