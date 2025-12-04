@@ -18,12 +18,12 @@ class ByteTrackDetector:
             yolo_model: Optional[YOLO], 
             project="./imagens/", 
             name="rtsp_byte_track_results", 
-            tracker="bytetrack.yaml",
+            tracker="bytetrack.yaml",  # <-- Usar configuração customizada
             batch=4,
             show=True,
             stream=True,
-            conf=0.3,
-            iou=0.5,
+            conf=0.1,
+            iou=0.2,
             max_frames_lost=30  # Novo parâmetro
             ):
         self.source = source
@@ -149,6 +149,9 @@ class ByteTrackDetector:
         if track_id not in self.active_tracks or len(self.active_tracks[track_id]) == 0:
             return
         
+        # Conta total de detecções do track
+        total_detections = len(self.active_tracks[track_id])
+        
         self.logger.info(f"Track {track_id} finalizado após {self.track_frames_lost[track_id]} frames perdidos")
         
         # Encontra o frame com melhor qualidade
@@ -156,14 +159,15 @@ class ByteTrackDetector:
         best_frame, best_score, best_timestamp, best_bbox, best_landmarks = best_data
         
         # Salva a melhor face
-        self._save_best_frame(track_id, best_frame, best_score, best_timestamp, best_bbox)
+        self._save_best_frame(track_id, best_frame, best_score, best_timestamp, best_bbox, total_detections)
         
         # Remove track da memória
         del self.active_tracks[track_id]
         del self.track_frames_lost[track_id]
 
     def _save_best_frame(self, track_id: int, frame: np.ndarray, score: float, 
-                         timestamp: datetime, bbox: Tuple[int, int, int, int]):
+                         timestamp: datetime, bbox: Tuple[int, int, int, int],
+                         total_detections: int):
         """Salva o frame com bbox desenhado"""
         try:
             from pathlib import Path
@@ -189,7 +193,10 @@ class ByteTrackDetector:
             
             # Salva
             cv2.imwrite(str(filepath), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            self.logger.info(f"Melhor face salva: {filename} (score={score:.4f})")
+            self.logger.info(
+                f"Melhor face salva: {filename} (score={score:.4f}) | "
+                f"Total de detecções: {total_detections}"
+            )
             
         except Exception as e:
             self.logger.error(f"Erro ao salvar frame do track {track_id}: {e}", exc_info=True)

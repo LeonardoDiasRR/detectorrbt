@@ -7,7 +7,7 @@ from datetime import datetime
 # 3rd-party
 from frame import Frame
 
-class Evento:
+class Event:
     """
     Representa um evento de detecção facial em um frame específico.
 
@@ -43,8 +43,8 @@ class Evento:
         if landmarks is not None and not isinstance(landmarks, np.ndarray):
             raise TypeError("landmarks deve ser um np.ndarray ou None.")
 
-        Evento._id_counter += 1
-        self.id: int = Evento._id_counter
+        Event._id_counter += 1
+        self.id: int = Event._id_counter
         self.frame: Frame = frame
         self.bbox: Tuple[int, int, int, int] = bbox
         self.bbox_frame_id: str = bbox_frame_id
