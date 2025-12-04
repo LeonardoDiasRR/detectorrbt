@@ -4,6 +4,7 @@ from typing import Tuple, Optional
 import os
 from pathlib import Path
 import yaml
+import cv2
 
 
 # Carrega configuração (qualidade_face) a partir do arquivo config.yaml no mesmo diretório
@@ -25,6 +26,64 @@ except Exception:
 # garante valores padrão
 for _k, _v in _DEFAULT_QUALIDADE.items():
     qualidade_cfg.setdefault(_k, _v)
+
+def get_sharpness_score(imagem: np.ndarray) -> float:
+    """
+    Calcula uma medida normalizada de nitidez baseada na variância do Laplaciano.
+
+    Parâmetros:
+        imagem (np.ndarray): Imagem em escala de cinza ou colorida (será convertida).
+
+    Retorno:
+        float: Valor entre 0 e 1 (quanto maior, mais nítida a imagem).
+               Retorna 0.01 se a imagem for inválida ou vazia.
+    """
+    # Verificação de tipo
+    if not isinstance(imagem, np.ndarray):
+        raise TypeError("imagem deve ser um objeto numpy.ndarray.")
+
+    # Converte para escala de cinza se necessário
+    if len(imagem.shape) == 3:
+        imagem = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
+
+    # Verifica se a imagem é válida
+    if imagem is None or imagem.size == 0:
+        return 0.01
+
+    # Calcula a variância do filtro Laplaciano
+    laplacian_var = float(cv2.Laplacian(imagem, cv2.CV_64F).var())
+
+    # Normaliza a variância para faixa [0, 1]
+    valor_maximo_esperado = 1000.0
+    nitidez_normalizada = min(laplacian_var / valor_maximo_esperado, 1.0)
+
+    return nitidez_normalizada if nitidez_normalizada > 0 else 0.01
+
+def get_face_bbox_score(bbox: Tuple[int, int, int, int]) -> float:
+    """
+    Calcula um score de proporção altura/largura da bounding box,
+    onde valores próximos da razão típica de um rosto (1.2) retornam score próximo de 1.0.
+
+    Parâmetros:
+        bbox (Tuple[int, int, int, int]): Coordenadas da bounding box (x1, y1, x2, y2)
+
+    Retorna:
+        float: Score entre 0 e 1
+    """
+    if not isinstance(bbox, tuple) or len(bbox) != 4:
+        raise ValueError("bbox deve ser uma tupla com 4 coordenadas")
+
+    x1, y1, x2, y2 = map(int, bbox)
+    width = max(x2 - x1, 1)
+    height = max(y2 - y1, 1)
+    proporcao = height / width
+
+    proporcao_ideal = 1.2  # Proporção típica de face (altura/largura)
+    erro = abs(proporcao - proporcao_ideal)
+    
+    # Score decresce conforme se afasta da proporção ideal
+    score = 1.0 - min(erro / proporcao_ideal, 1.0)
+    return round(score, 3)
 
 
 def get_face_score(landmarks: np.ndarray) -> float:
@@ -75,33 +134,6 @@ def get_face_score(landmarks: np.ndarray) -> float:
 
     # Garante que o score esteja dentro do intervalo [0.0, 1.0]
     return max(0.0, min(1.0, score))
-
-
-def get_face_bbox_score(bbox: Tuple[int, int, int, int]) -> float:
-    """
-    Calcula um score de proporção altura/largura da bounding box,
-    onde valores próximos da razão típica de um rosto (1.2) retornam score próximo de 1.0.
-
-    Parâmetros:
-        bbox (Tuple[int, int, int, int]): Coordenadas da bounding box (x1, y1, x2, y2)
-
-    Retorna:
-        float: Score entre 0 e 1
-    """
-    if not isinstance(bbox, tuple) or len(bbox) != 4:
-        raise ValueError("bbox deve ser uma tupla com 4 coordenadas")
-
-    x1, y1, x2, y2 = map(int, bbox)
-    width = max(x2 - x1, 1)
-    height = max(y2 - y1, 1)
-    proporcao = height / width
-
-    proporcao_ideal = 1.2  # Proporção típica de face (altura/largura)
-    erro = abs(proporcao - proporcao_ideal)
-    
-    # Score decresce conforme se afasta da proporção ideal
-    score = 1.0 - min(erro / proporcao_ideal, 1.0)
-    return round(score, 3)
 
 
 def get_face_quality_score(

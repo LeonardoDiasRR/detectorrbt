@@ -26,15 +26,15 @@ show: true
 
 # Pesos na escolha da melhor face do track
 qualidade_face:
-  tamanho_bbox: 2
-  face_frontal: 4
+  confianca_deteccao: 3
+  tamanho_bbox: 4
+  face_frontal: 6
+  proporcao_bbox: 1
+  nitidez: 1
 
-cameras:
-  - id: 1
-    source: "rtsp://findface:Mitra2021@10.95.7.24:7001/022cdcf4-b31d-f379-c2d8-b4e727f8a148"
-    name: "Camera 1"
-  # - id: 2
-  #   source: "rtsp://findface:Mitra2021@10.95.7.24:7001/022cdcf4-b31d-f379-c2d8-b4e727f8a148"
-  #   name: "Camera 2"
 
+# Modo verboso de log
+verbose_log: false
+
+# Prefixo para os grupos de câmeras no FindFace
 prefixo_grupo_camera_findface: "TESTE"
