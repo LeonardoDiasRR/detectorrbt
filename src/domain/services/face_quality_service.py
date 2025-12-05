@@ -6,9 +6,8 @@ from typing import Optional
 import numpy as np
 import cv2
 
-from domain.value_objects import BboxVO, ConfidenceVO, LandmarksVO
-from domain.entities.frame_entity import Frame
-from config_loader import CONFIG
+from src.domain.value_objects import BboxVO, ConfidenceVO, LandmarksVO
+from src.domain.entities.frame_entity import Frame
 
 
 class FaceQualityService:
@@ -119,7 +118,12 @@ class FaceQualityService:
         frame: Frame,
         bbox: BboxVO,
         confidence: ConfidenceVO,
-        landmarks: LandmarksVO
+        landmarks: LandmarksVO,
+        peso_confianca: float = 3,
+        peso_tamanho: float = 4,
+        peso_frontal: float = 6,
+        peso_proporcao: float = 1,
+        peso_nitidez: float = 1
     ) -> ConfidenceVO:
         """
         Calcula o score de qualidade de uma face detectada.
@@ -128,14 +132,14 @@ class FaceQualityService:
         :param bbox: Bounding box da face.
         :param confidence: Confiança da detecção YOLO.
         :param landmarks: Landmarks faciais (pode ser None).
+        :param peso_confianca: Peso para score de confiança (padrão: 3).
+        :param peso_tamanho: Peso para score de tamanho (padrão: 4).
+        :param peso_frontal: Peso para score de frontalidade (padrão: 6).
+        :param peso_proporcao: Peso para score de proporção (padrão: 1).
+        :param peso_nitidez: Peso para score de nitidez (padrão: 1).
         :return: Score de qualidade como ConfidenceVO (0.0 a 1.0).
         """
-        # Obtém pesos das configurações
-        peso_confianca = CONFIG.get("qualidade_face", {}).get("confianca_deteccao", 3)
-        peso_tamanho = CONFIG.get("qualidade_face", {}).get("tamanho_bbox", 4)
-        peso_frontal = CONFIG.get("qualidade_face", {}).get("face_frontal", 6)
-        peso_proporcao = CONFIG.get("qualidade_face", {}).get("proporcao_bbox", 1)
-        peso_nitidez = CONFIG.get("qualidade_face", {}).get("nitidez", 1)
+        # Usa pesos passados como parâmetros com valores padrão
 
         # Calcula scores individuais usando métodos internos
         score_confianca = FaceQualityService._calculate_confidence_score(confidence)

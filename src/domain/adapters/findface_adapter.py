@@ -9,8 +9,8 @@ import logging
 
 # local
 from findface_multi import FindfaceMulti
-from domain.entities import Camera, Event
-from domain.value_objects import CameraTokenVO, IdVO, NameVO, CameraSourceVO
+from src.domain.entities import Camera, Event
+from src.domain.value_objects import CameraTokenVO, IdVO, NameVO, CameraSourceVO
 
 
 class FindfaceAdapter:

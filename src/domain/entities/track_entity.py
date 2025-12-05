@@ -3,8 +3,8 @@ Entidade Track do domínio.
 """
 
 from typing import List, Dict, Any, Optional
-from domain.value_objects import IdVO
-from domain.entities.event_entity import Event
+from src.domain.value_objects import IdVO
+from src.domain.entities.event_entity import Event
 
 
 class Track:

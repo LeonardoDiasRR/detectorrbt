@@ -5,7 +5,7 @@ Entidade Frame do domínio.
 from typing import Optional, Tuple
 import numpy as np
 import cv2
-from domain.value_objects import IdVO, NameVO, CameraTokenVO, TimestampVO
+from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, TimestampVO
 
 
 class Frame:

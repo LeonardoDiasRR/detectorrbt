@@ -1,0 +1,87 @@
+"""
+Objeto de configuração centralizado.
+Fornece acesso type-safe às configurações.
+"""
+
+from dataclasses import dataclass
+from typing import Optional, List, Dict, Any
+
+
+@dataclass
+class CameraConfig:
+    """Configuração de uma câmera individual."""
+    id: int
+    name: str
+    url: str
+    token: str = ""
+
+
+@dataclass
+class YOLOConfig:
+    """Configuração do modelo YOLO."""
+    model_path: str = "yolov8n-face.pt"
+    conf_threshold: float = 0.1
+    iou_threshold: float = 0.2
+
+
+@dataclass
+class ByteTrackConfig:
+    """Configuração do ByteTrack."""
+    tracker_config: str = "bytetrack.yaml"
+    max_frames_lost: int = 30
+
+
+@dataclass
+class FindFaceConfig:
+    """Configuração do FindFace."""
+    url_base: str
+    user: str
+    password: str
+    uuid: str
+    camera_prefix: str = "EXTERNO"
+
+
+@dataclass
+class ProcessingConfig:
+    """Configuração de processamento."""
+    gpu_index: int = 0
+    gpu_batch_size: int = 32
+    cpu_batch_size: int = 4
+    show_video: bool = True
+    verbose_log: bool = False
+
+
+@dataclass
+class StorageConfig:
+    """Configuração de armazenamento."""
+    project_dir: str = "./imagens/"
+    results_dir: str = "rtsp_byte_track_results"
+
+
+@dataclass
+class AppSettings:
+    """
+    Configurações completas da aplicação.
+    Objeto imutável que centraliza todas as configurações.
+    """
+    findface: FindFaceConfig
+    yolo: YOLOConfig
+    bytetrack: ByteTrackConfig
+    processing: ProcessingConfig
+    storage: StorageConfig
+    cameras: List[CameraConfig]
+    
+    @property
+    def device(self) -> str:
+        """Retorna o dispositivo a ser usado (cuda ou cpu)."""
+        import torch
+        if torch.cuda.is_available():
+            return f"cuda:{self.processing.gpu_index}"
+        return "cpu"
+    
+    @property
+    def batch_size(self) -> int:
+        """Retorna o batch size baseado no dispositivo."""
+        if self.device.startswith("cuda"):
+            return self.processing.gpu_batch_size
+        return self.processing.cpu_batch_size

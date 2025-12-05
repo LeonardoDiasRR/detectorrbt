@@ -1,104 +1,84 @@
 # built-in
 import os
 import logging
-from dotenv import load_dotenv
 import traceback
 
 # 3rd party
 from ultralytics import YOLO
-import torch
 
 # local
-from findface_multi import FindfaceMulti
-from domain.adapters import FindfaceAdapter
-from domain.services import ByteTrackDetectorService
-from domain.entities import Camera
-from domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
-from config_loader import CONFIG
+from src.infrastructure import ConfigLoader, AppSettings
+from src.infrastructure.external.findface_client import create_findface_client
+from src.domain.adapters import FindfaceAdapter
+from src.domain.services import ByteTrackDetectorService
+from src.domain.entities import Camera
+from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
 
-# Configura logging ANTES de importar outros módulos
+# Configura logging
 log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(log_file, mode='w', encoding='utf-8'),
-        logging.StreamHandler()  # Mantém output no console também
+        logging.StreamHandler()
     ],
-    force=True  # Força reconfiguração mesmo se já foi chamado
+    force=True
 )
 
 
-def main():
+def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     logger = logging.getLogger(__name__)
     
     # Limpa o diretório de imagens antes de iniciar
-    imagens_dir = os.path.join(os.path.dirname(__file__), "imagens")
+    imagens_dir = os.path.join(os.path.dirname(__file__), settings.storage.project_dir)
     if os.path.exists(imagens_dir):
         import shutil
         shutil.rmtree(imagens_dir)
         logger.info(f"Diretório '{imagens_dir}' limpo.")
     
-    # Recria o diretório vazio
     os.makedirs(imagens_dir, exist_ok=True)
     logger.info(f"Diretório '{imagens_dir}' criado.")
     
-    # Usa configurações do CONFIG
-    gpu_index = CONFIG.get("gpu_index", 0)
-    device_type = f"cuda:{gpu_index}" if (torch is not None and torch.cuda.is_available()) else "cpu"
-
-    # Choose batch size based on GPU availability
-    if device_type.startswith("cuda"):
-        batch = CONFIG.get("gpu_batch_size", 32)
-    else:
-        batch = CONFIG.get("cpu_batch_size", 4)
-
-    show = CONFIG.get("show", True)
-    cameras = CONFIG.get("cameras", [])
     processors = []
 
-    # Prepare a YOLO model instance (shared)
+    # Carrega modelo YOLO
     try:
-        model_path = CONFIG.get("face_detection_model", "yolov8n-face.pt")
-        yolo_model = YOLO(model_path)
-        logger.info(f"Modelo YOLO carregado: {model_path} no dispositivo {device_type}")
+        yolo_model = YOLO(settings.yolo.model_path)
+        logger.info(f"Modelo YOLO carregado: {settings.yolo.model_path} no dispositivo {settings.device}")
     except Exception as e:
         logger.error(f"Erro ao carregar modelo YOLO: {e}")
-        yolo_model = None
-    
-    # Cria adapter do FindFace
-    findface_adapter = FindfaceAdapter(
-        ff, 
-        camera_prefix=CONFIG.get("prefixo_grupo_camera_findface", "TESTE")
-    )
+        return
     
     # Obtém câmeras usando o adapter
     cameras_ff = findface_adapter.get_cameras()
-    logger.info(f"Total de câmeras obtidas: {len(cameras_ff)}")
+    logger.info(f"Total de câmeras obtidas do FindFace: {len(cameras_ff)}")
     
-    # Adiciona câmeras extras do config (se houver)
-    for cam in cameras:
+    # Adiciona câmeras extras do config
+    for cam_config in settings.cameras:
         camera = Camera(
-            camera_id=IdVO(cam.get("id", 0)),
-            camera_name=NameVO(cam.get("name", "Camera Local")),
-            camera_token=CameraTokenVO(cam.get("token", "")),
-            source=CameraSourceVO(cam.get("url", ""))
+            camera_id=IdVO(cam_config.id),
+            camera_name=NameVO(cam_config.name),
+            camera_token=CameraTokenVO(cam_config.token),
+            source=CameraSourceVO(cam_config.url)
         )
         cameras_ff.append(camera)
     
+    # Cria serviços de detecção
     for camera in cameras_ff:
-        # Cria serviço de detecção usando entidades do domínio e o adapter
         processor = ByteTrackDetectorService(
             camera=camera,
             yolo_model=yolo_model,
             findface_adapter=findface_adapter,
-            tracker=CONFIG.get("tracker", "bytetrack.yaml"),
-            batch=batch,
-            show=show,
-            conf=CONFIG.get("conf", 0.1),
-            iou=CONFIG.get("iou", 0.2),
-            max_frames_lost=CONFIG.get("max_frames_lost", 30),
-            verbose_log=CONFIG.get("verbose_log", False)
+            tracker=settings.bytetrack.tracker_config,
+            batch=settings.batch_size,
+            show=settings.processing.show_video,
+            conf=settings.yolo.conf_threshold,
+            iou=settings.yolo.iou_threshold,
+            max_frames_lost=settings.bytetrack.max_frames_lost,
+            verbose_log=settings.processing.verbose_log,
+            project_dir=settings.storage.project_dir,
+            results_dir=settings.storage.results_dir
         )
         processors.append(processor)
 
@@ -112,19 +92,22 @@ def main():
 
 
 if __name__ == "__main__":
-    # Carrega variáveis de ambiente do arquivo .env
-    load_dotenv()
-
     try:
-        ff = FindfaceMulti(		
-            url_base=os.environ["FINDFACE_URL"],
-            user=os.environ["FINDFACE_USER"],
-            password=os.environ["FINDFACE_PASSWORD"],
-            uuid=os.environ["FINDFACE_UUID"]
-        )
-        main()
+        # Carrega configurações type-safe
+        settings = ConfigLoader.load()
         
-    except KeyError as e:
+        # Cria cliente FindFace
+        ff = create_findface_client(settings.findface)
+        
+        # Cria adapter do FindFace
+        findface_adapter = FindfaceAdapter(ff, camera_prefix=settings.findface.camera_prefix)
+        
+        # Executa aplicação
+        main(settings, findface_adapter)
+        
+    except Exception as e:
+        print(f"Erro ao iniciar aplicação: {e}")
         print(traceback.format_exc())
     finally:
-        ff.logout()
+        if 'ff' in locals():
+            ff.logout()

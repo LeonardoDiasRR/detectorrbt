@@ -3,7 +3,7 @@ Entidade Camera do domínio.
 """
 
 from typing import Dict, Any
-from domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
+from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
 
 
 class Camera:

@@ -3,8 +3,8 @@ Entidade Event representando uma detecção de face em um frame.
 """
 
 from typing import Optional
-from domain.entities.frame_entity import Frame
-from domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO
+from src.domain.entities.frame_entity import Frame
+from src.domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO
 
 
 class Event:
@@ -53,7 +53,7 @@ class Event:
         # Calcula o score de qualidade se não foi fornecido
         if face_quality_score is None:
             # Import aqui para evitar circular import
-            from domain.services.face_quality_service import FaceQualityService
+            from src.domain.services.face_quality_service import FaceQualityService
             self._face_quality_score = FaceQualityService.calculate_quality(
                 bbox=bbox,
                 confidence=confidence,

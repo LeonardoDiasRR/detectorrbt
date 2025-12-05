@@ -15,10 +15,9 @@ import cv2
 from ultralytics import YOLO
 
 # local
-from domain.adapters.findface_adapter import FindfaceAdapter
-from domain.entities import Camera, Frame, Event, Track
-from domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO, TimestampVO
-from config_loader import CONFIG
+from src.domain.adapters.findface_adapter import FindfaceAdapter
+from src.domain.entities import Camera, Frame, Event, Track
+from src.domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO, TimestampVO
 
 
 class ByteTrackDetectorService:
@@ -39,7 +38,9 @@ class ByteTrackDetectorService:
         conf: float = 0.1,
         iou: float = 0.2,
         max_frames_lost: int = 30,
-        verbose_log: bool = False
+        verbose_log: bool = False,
+        project_dir: str = "./imagens/",
+        results_dir: str = "rtsp_byte_track_results"
     ):
         """
         Inicializa o serviço de detecção de faces.
@@ -55,6 +56,8 @@ class ByteTrackDetectorService:
         :param iou: Threshold de IOU para o tracker.
         :param max_frames_lost: Máximo de frames perdidos antes de finalizar um track.
         :param verbose_log: Se deve exibir logs detalhados.
+        :param project_dir: Diretório base para salvamento de imagens.
+        :param results_dir: Nome do subdiretório para resultados.
         :raises TypeError: Se camera não for do tipo Camera.
         """
         if not isinstance(camera, Camera):
@@ -77,6 +80,8 @@ class ByteTrackDetectorService:
         self.iou = iou
         self.max_frames_lost = max_frames_lost
         self.verbose_log = verbose_log
+        self.project_dir = project_dir
+        self.results_dir = results_dir
         self.running = False
         
         self.logger = logging.getLogger(
@@ -338,9 +343,7 @@ class ByteTrackDetectorService:
             
             # Diretório
             from pathlib import Path
-            project_dir = Path(CONFIG.get("project", "./imagens/"))
-            name_dir = CONFIG.get("name", "rtsp_byte_track_results")
-            filepath = project_dir / name_dir / filename
+            filepath = Path(self.project_dir) / self.results_dir / filename
             filepath.parent.mkdir(parents=True, exist_ok=True)
             
             # Salva
