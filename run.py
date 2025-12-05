@@ -1,5 +1,6 @@
 # built-in
 import os
+import sys
 import logging
 import traceback
 import threading
@@ -13,6 +14,16 @@ from src.domain.services import ByteTrackDetectorService
 from src.domain.entities import Camera
 from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
 from src.infrastructure.model import ModelFactory
+
+# Suprimir avisos do OpenCV e Ultralytics
+os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
+os.environ['YOLO_VERBOSE'] = 'False'
+
+# Redirecionar stderr para /dev/null (Linux) ou NUL (Windows)
+if sys.platform.startswith('linux') or sys.platform == 'darwin':
+    sys.stderr = open('/dev/null', 'w')
+elif sys.platform == 'win32':
+    sys.stderr = open('NUL', 'w')
 
 # Configura logging com rotação
 log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
