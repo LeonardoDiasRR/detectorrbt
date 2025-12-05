@@ -78,7 +78,7 @@ tensorrt:
 # Configurações OpenVINO
 openvino:
   # Habilita o uso de OpenVINO se disponível
-  enabled: false
+  enabled: true
   # Dispositivo OpenVINO: AUTO (seleção automática), CPU, GPU, NPU
   device: "AUTO"
   # Precisão: FP16 (recomendado), FP32, INT8
