@@ -52,7 +52,7 @@ movimento:
 validacao:
   # Confiança mínima do melhor evento para considerar track válido
   # Apenas tracks válidos são enviados ao FindFace
-  confianca_minima: 0.45
+  confianca_minima: 0.41
 
 # Prefixo dos grupos de câmeras no FindFace
 prefixo_grupo_camera_findface: "TESTE"
