@@ -61,6 +61,16 @@ validacao:
 # Prefixo dos grupos de câmeras no FindFace
 prefixo_grupo_camera_findface: "TESTE"
 
+# Configurações TensorRT (melhor performance em GPUs NVIDIA)
+tensorrt:
+  # Habilita o uso de TensorRT se disponível (requer CUDA)
+  # TensorRT tem precedência sobre OpenVINO quando GPU CUDA está disponível
+  enabled: true
+  # Precisão: FP16 (recomendado), FP32, INT8
+  precision: "FP16"
+  # Workspace em GB para otimizações TensorRT (padrão: 4GB)
+  workspace: 4
+
 # Configurações OpenVINO
 openvino:
   # Habilita o uso de OpenVINO se disponível

@@ -44,6 +44,9 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     try:
         detection_model = ModelFactory.create_model(
             model_path=settings.yolo.model_path,
+            use_tensorrt=settings.tensorrt.enabled,
+            tensorrt_precision=settings.tensorrt.precision,
+            tensorrt_workspace=settings.tensorrt.workspace,
             use_openvino=settings.openvino.enabled,
             openvino_device=settings.openvino.device,
             openvino_precision=settings.openvino.precision
@@ -54,7 +57,8 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
             f"Modelo carregado com sucesso: "
             f"backend={model_info['backend']}, "
             f"device={model_info['device']}, "
-            f"precision={model_info['precision']}"
+            f"precision={model_info['precision']}, "
+            f"optimization={model_info.get('optimization', 'None')}"
         )
     except Exception as e:
         logger.error(f"Erro ao carregar modelo: {e}")

@@ -20,6 +20,7 @@ from .settings import (
     CameraConfig,
     ValidationConfig,
     MovementConfig,
+    TensorRTConfig,
     OpenVINOConfig
 )
 
@@ -117,6 +118,13 @@ class ConfigLoader:
             min_confidence=yaml_config.get("validacao", {}).get("confianca_minima", 0.45)
         )
         
+        # Configuração TensorRT
+        tensorrt_config = TensorRTConfig(
+            enabled=yaml_config.get("tensorrt", {}).get("enabled", True),
+            precision=yaml_config.get("tensorrt", {}).get("precision", "FP16"),
+            workspace=yaml_config.get("tensorrt", {}).get("workspace", 4)
+        )
+        
         # Configuração OpenVINO
         openvino_config = OpenVINOConfig(
             enabled=yaml_config.get("openvino", {}).get("enabled", True),
@@ -143,6 +151,7 @@ class ConfigLoader:
             storage=storage_config,
             movement=movement_config,
             validation=validation_config,
+            tensorrt=tensorrt_config,
             openvino=openvino_config,
             cameras=cameras
         )

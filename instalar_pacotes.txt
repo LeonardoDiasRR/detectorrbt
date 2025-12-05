@@ -7,6 +7,9 @@ pip install onnxruntime-gpu
 # pyTorch com CPU
 pip install torch torchvision torchaudio
 
+# TensorRT (se disponível via pip para CUDA 12.1)
+pip install nvidia-tensorrt
+
 # Demais requisitos
 pip install -r requirements.txt
 

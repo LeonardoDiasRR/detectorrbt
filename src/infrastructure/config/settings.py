@@ -73,6 +73,14 @@ class ValidationConfig:
 
 
 @dataclass
+class TensorRTConfig:
+    """Configuração do TensorRT."""
+    enabled: bool = True
+    precision: str = "FP16"  # FP16, FP32, INT8
+    workspace: int = 4  # Workspace em GB
+
+
+@dataclass
 class OpenVINOConfig:
     """Configuração do OpenVINO."""
     enabled: bool = True
@@ -93,7 +101,8 @@ class AppSettings:
     storage: StorageConfig
     movement: MovementConfig
     validation: ValidationConfig
-    openvino: OpenVINOConfig  # NOVO
+    tensorrt: TensorRTConfig
+    openvino: OpenVINOConfig
     cameras: List[CameraConfig]
     
     @property
