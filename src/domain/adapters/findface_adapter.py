@@ -103,18 +103,23 @@ class FindfaceAdapter:
             x1, y1, x2, y2 = event.bbox.value()
             roi = [int(x1), int(y1), int(x2), int(y2)]
             
+            # Converte timestamp para formato ISO 8601
+            timestamp_iso = event.frame.timestamp.value().isoformat()
+            
             # Envia para FindFace
             resposta = self.findface.add_face_event(
                 token=event.camera_token.value(),
                 fullframe=imagem_bytes,
                 camera=event.camera_id.value(),
                 roi=roi,
-                mf_selector="all"
+                mf_selector="all",
+                timestamp=timestamp_iso
             )
             
             self.logger.debug(
                 f"Evento enviado para FindFace - Camera: {event.camera_id.value()}, "
-                f"Quality: {event.face_quality_score.value():.4f}"
+                f"Quality: {event.face_quality_score.value():.4f}, "
+                f"Timestamp: {timestamp_iso}"
             )
             
             return resposta

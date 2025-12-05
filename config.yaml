@@ -26,7 +26,7 @@ conf: 0.1  # Valor padrão: 0.1 igual o do algoritmo ByteTrack
 iou: 0.2 # Mais permissivo, mantêm o track por mais tempo
 
 # Exibir na tela
-show: true
+show: false
 
 # Pesos na escolha da melhor face do track
 qualidade_face:
