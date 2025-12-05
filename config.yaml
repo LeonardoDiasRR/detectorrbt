@@ -1,3 +1,4 @@
+# config.yaml
 # Índice da GPU a ser utilizada
 gpu_index: 0
 
@@ -7,6 +8,9 @@ gpu_batch_size: 32
 
 # Limite de frames sem detecção para considerar o objeto perdido
 max_frames_lost: 30
+
+# Limite máximo de frames por track
+max_frames_por_track: 900
 
 # Modelo de detecção facial
 face_detection_model: "yolov8n-face.pt"

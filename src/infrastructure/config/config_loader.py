@@ -90,7 +90,8 @@ class ConfigLoader:
         
         bytetrack_config = ByteTrackConfig(
             tracker_config=yaml_config.get("tracker", "bytetrack.yaml"),
-            max_frames_lost=yaml_config.get("max_frames_lost", 30)
+            max_frames_lost=yaml_config.get("max_frames_lost", 30),
+            max_frames_per_track=yaml_config.get("max_frames_por_track", 900)
         )
         
         processing_config = ProcessingConfig(

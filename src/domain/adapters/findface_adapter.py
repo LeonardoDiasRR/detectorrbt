@@ -109,7 +109,7 @@ class FindfaceAdapter:
                 fullframe=imagem_bytes,
                 camera=event.camera_id.value(),
                 roi=roi,
-                mf_selector="biggest"
+                mf_selector="all"
             )
             
             self.logger.debug(

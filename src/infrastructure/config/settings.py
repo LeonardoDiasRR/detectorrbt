@@ -29,6 +29,7 @@ class ByteTrackConfig:
     """Configuração do ByteTrack."""
     tracker_config: str = "bytetrack.yaml"
     max_frames_lost: int = 30
+    max_frames_per_track: int = 900
 
 
 @dataclass

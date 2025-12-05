@@ -286,8 +286,7 @@ class FindfaceMulti:
                 if dia not in dias_validos:
                     raise ValueError(f"Dia inválido no 'disable_schedule': {dia}")
                 if not isinstance(blocos, list) or not all(
-                    isinstance(bloco, list) and all(isinstance(h, str) for h in bloco)
-                    for bloco in blocos
+                    isinstance(block, list) and all(isinstance(h, str) for h in block) for block in blocos
                 ):
                     raise TypeError(f"O conteúdo de 'disable_schedule[{dia}]' deve ser uma lista de listas de strings.")
 
@@ -537,7 +536,7 @@ class FindfaceMulti:
         source_photo: Union[str, bytes, io.BytesIO],
         card_id: int,
         create_from: Optional[str] = None,
-        mf_selector: str = "reject",
+        mf_selector: str = "all",
         upload_list: Optional[int] = None,
         frame_coords_left: Optional[int] = None,
         frame_coords_top: Optional[int] = None,
@@ -551,7 +550,7 @@ class FindfaceMulti:
         :param source_photo: Caminho da imagem, conteúdo em bytes ou io.BytesIO (obrigatório).
         :param card_id: ID do card humano vinculado (obrigatório).
         :param create_from: Origem da criação ('detection:<id>' ou 'faceevent:<id>').
-        :param mf_selector: Estratégia de seleção de face ('reject' ou 'biggest').
+        :param mf_selector: Estratégia de seleção de face ('reject', 'all' ou 'biggest'). Default: 'all'.
         :param upload_list: ID opcional da lista de upload.
         :param frame_coords_left: Coordenada esquerda da face.
         :param frame_coords_top: Coordenada superior da face.
@@ -570,8 +569,8 @@ class FindfaceMulti:
             raise TypeError("O parâmetro 'card_id' deve ser um inteiro.")
         if not isinstance(active, bool):
             raise TypeError("O parâmetro 'active' deve ser booleano.")
-        if mf_selector not in {"reject", "biggest"}:
-            raise ValueError("O parâmetro 'mf_selector' deve ser 'reject' ou 'biggest'.")
+        if mf_selector not in {"reject", "all", "biggest"}:
+            raise ValueError("O parâmetro 'mf_selector' deve ser 'reject', 'all' ou 'biggest'.")
         if create_from is not None and not isinstance(create_from, str):
             raise TypeError("O parâmetro 'create_from' deve ser uma string.")
 

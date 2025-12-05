@@ -43,7 +43,8 @@ class ByteTrackDetectorService:
         results_dir: str = "rtsp_byte_track_results",
         min_movement_threshold: float = 50.0,
         min_movement_percentage: float = 0.3,
-        min_confidence_threshold: float = 0.45
+        min_confidence_threshold: float = 0.45,
+        max_frames_per_track: int = 900  # RENOMEADO
     ):
         """
         Inicializa o serviço de detecção de faces.
@@ -64,6 +65,7 @@ class ByteTrackDetectorService:
         :param min_movement_threshold: Limite mínimo de movimento em pixels.
         :param min_movement_percentage: Percentual mínimo de frames com movimento.
         :param min_confidence_threshold: Confiança mínima para considerar track válido.
+        :param max_frames_per_track: Máximo de frames permitidos por track.
         :raises TypeError: Se camera não for do tipo Camera.
         """
         if not isinstance(camera, Camera):
@@ -91,6 +93,7 @@ class ByteTrackDetectorService:
         self.min_movement_threshold = min_movement_threshold
         self.min_movement_percentage = min_movement_percentage
         self.min_confidence_threshold = min_confidence_threshold
+        self.max_frames_per_track = max_frames_per_track  # RENOMEADO
         self.running = False
         
         self.logger = logging.getLogger(
@@ -100,6 +103,7 @@ class ByteTrackDetectorService:
         # Estruturas para rastreamento de tracks usando entidades do domínio
         self.active_tracks: Dict[int, Track] = {}
         self.track_frames_lost: Dict[int, int] = defaultdict(int)
+        self.track_frame_count: Dict[int, int] = defaultdict(int)  # NOVO: contador de frames por track
         
         # Contador global de IDs para frames e eventos
         self._frame_id_counter = 0
@@ -161,9 +165,21 @@ class ByteTrackDetectorService:
                                     id=IdVO(track_id),
                                     events=[]
                                 )
+                                self.track_frame_count[track_id] = 0  # NOVO: inicializa contador
                             
                             self.active_tracks[track_id].add_event(event)
                             self.track_frames_lost[track_id] = 0
+                            self.track_frame_count[track_id] += 1  # NOVO: incrementa contador de frames
+                            
+                            # ATUALIZADO: Verifica se o track atingiu o limite de FRAMES
+                            if self.track_frame_count[track_id] >= self.max_frames_per_track:
+                                self.logger.info(
+                                    f"Track {track_id} atingiu o limite de {self.max_frames_per_track} frames. "
+                                    "Finalizando track."
+                                )
+                                self._finalize_track(track_id)
+                                current_frame_tracks.discard(track_id)
+                                continue
                             
                             if self.verbose_log:
                                 self.logger.info(
@@ -308,6 +324,8 @@ class ByteTrackDetectorService:
             self.logger.warning(f"Track {track_id} vazio, não será processado")
             del self.active_tracks[track_id]
             del self.track_frames_lost[track_id]
+            if track_id in self.track_frame_count:  # NOVO: limpa contador de frames
+                del self.track_frame_count[track_id]
             return
         
         # Verifica se o track é válido
@@ -324,8 +342,12 @@ class ByteTrackDetectorService:
         best_event = track.get_best_event()
         best_confidence = best_event.confidence.value() if best_event else 0.0
         
+        # ATUALIZADO: Log com informação de frames processados
+        total_frames = self.track_frame_count.get(track_id, 0)
+        
         self.logger.info(
             f"Track {track_id} finalizado após {self.track_frames_lost[track_id]} frames perdidos. "
+            f"Total de frames: {total_frames} | "  # ATUALIZADO
             f"Total de eventos: {track.event_count} | "
             f"Movimento detectado: {has_movement} | "
             f"Distância média: {movement_stats['average_distance']:.2f}px | "
@@ -337,6 +359,8 @@ class ByteTrackDetectorService:
         # Remove track da memória ANTES de processar
         del self.active_tracks[track_id]
         del self.track_frames_lost[track_id]
+        if track_id in self.track_frame_count:  # NOVO: limpa contador de frames
+            del self.track_frame_count[track_id]
         
         if best_event is None:
             self.logger.warning(f"Track {track_id} não possui melhor evento")
