@@ -42,7 +42,8 @@ class ByteTrackDetectorService:
         project_dir: str = "./imagens/",
         results_dir: str = "rtsp_byte_track_results",
         min_movement_threshold: float = 50.0,
-        min_movement_percentage: float = 0.3
+        min_movement_percentage: float = 0.3,
+        min_confidence_threshold: float = 0.45
     ):
         """
         Inicializa o serviço de detecção de faces.
@@ -62,6 +63,7 @@ class ByteTrackDetectorService:
         :param results_dir: Nome do subdiretório para resultados.
         :param min_movement_threshold: Limite mínimo de movimento em pixels.
         :param min_movement_percentage: Percentual mínimo de frames com movimento.
+        :param min_confidence_threshold: Confiança mínima para considerar track válido.
         :raises TypeError: Se camera não for do tipo Camera.
         """
         if not isinstance(camera, Camera):
@@ -88,6 +90,7 @@ class ByteTrackDetectorService:
         self.results_dir = results_dir
         self.min_movement_threshold = min_movement_threshold
         self.min_movement_percentage = min_movement_percentage
+        self.min_confidence_threshold = min_confidence_threshold
         self.running = False
         
         self.logger = logging.getLogger(
@@ -242,6 +245,35 @@ class ByteTrackDetectorService:
         
         return event
 
+    def is_valid(self, track: Track) -> bool:
+        """
+        Valida se um track atende às condições necessárias para ser considerado válido.
+        
+        Um track é válido se:
+        1. Possui movimento significativo
+        2. O melhor evento possui confiança acima do limiar mínimo
+        
+        :param track: Track a ser validado.
+        :return: True se o track for válido, False caso contrário.
+        """
+        # Verifica movimento
+        has_movement = track.has_movement(
+            min_threshold_pixels=self.min_movement_threshold,
+            min_frame_percentage=self.min_movement_percentage
+        )
+        
+        if not has_movement:
+            return False
+        
+        # Verifica confiança do melhor evento
+        best_event = track.get_best_event()
+        if best_event is None:
+            return False
+        
+        has_sufficient_confidence = best_event.confidence.value() >= self.min_confidence_threshold
+        
+        return has_sufficient_confidence
+
     def _update_lost_tracks(self, current_frame_tracks: set):
         """
         Atualiza contadores de frames perdidos e finaliza tracks.
@@ -278,44 +310,58 @@ class ByteTrackDetectorService:
             del self.track_frames_lost[track_id]
             return
         
-        # Verifica se houve movimento
+        # Verifica se o track é válido
+        is_valid = self.is_valid(track)
+        
+        # Obtém estatísticas de movimento
         has_movement = track.has_movement(
             min_threshold_pixels=self.min_movement_threshold,
             min_frame_percentage=self.min_movement_percentage
         )
-        
-        # Obtém estatísticas de movimento
         movement_stats = track.get_movement_statistics()
+        
+        # Obtém melhor evento do track
+        best_event = track.get_best_event()
+        best_confidence = best_event.confidence.value() if best_event else 0.0
         
         self.logger.info(
             f"Track {track_id} finalizado após {self.track_frames_lost[track_id]} frames perdidos. "
             f"Total de eventos: {track.event_count} | "
             f"Movimento detectado: {has_movement} | "
             f"Distância média: {movement_stats['average_distance']:.2f}px | "
-            f"Distância máxima: {movement_stats['max_distance']:.2f}px"
+            f"Distância máxima: {movement_stats['max_distance']:.2f}px | "
+            f"Confiança: {best_confidence:.2f} | "
+            f"Válido: {is_valid}"
         )
         
         # Remove track da memória ANTES de processar
         del self.active_tracks[track_id]
         del self.track_frames_lost[track_id]
         
-        # Obtém melhor evento do track
-        best_event = track.get_best_event()
-        
         if best_event is None:
             self.logger.warning(f"Track {track_id} não possui melhor evento")
             return
         
-        # Salva melhor face
-        self._save_best_event(track_id, best_event, track.event_count, has_movement)
+        # Salva melhor face (sempre salva, mas cor do bbox depende da validade)
+        self._save_best_event(track_id, best_event, track.event_count, has_movement, is_valid)
         
-        # Envia para FindFace apenas se houver movimento
-        if self.findface_adapter is not None and has_movement:
+        # Envia para FindFace apenas se o track for válido
+        if self.findface_adapter is not None and is_valid:
             self._send_best_event_to_findface(track_id, best_event, track.event_count)
-        elif not has_movement:
-            self.logger.info(f"Track {track_id} descartado: sem movimento significativo")
+        elif not is_valid:
+            # Log detalhado do motivo da invalidação
+            movimento_str = "SIM" if has_movement else "NÃO"
+            razao = "sem movimento significativo" if not has_movement else f"confiança insuficiente ({best_confidence:.2f} < {self.min_confidence_threshold})"
+            
+            self.logger.warning(
+                f"Track {track_id} INVÁLIDO - Descartado | "
+                f"Razão: {razao} | "
+                f"Movimento: {movimento_str} | "
+                f"Confiança: {best_confidence:.2f} | "
+                f"Threshold mínimo: {self.min_confidence_threshold}"
+            )
 
-    def _save_best_event(self, track_id: int, event: Event, total_events: int, has_movement: bool):
+    def _save_best_event(self, track_id: int, event: Event, total_events: int, has_movement: bool, is_valid: bool):
         """
         Salva o melhor evento do track em disco com bbox desenhado.
         
@@ -323,6 +369,7 @@ class ByteTrackDetectorService:
         :param event: Melhor evento do track.
         :param total_events: Total de eventos no track.
         :param has_movement: Se o track teve movimento significativo.
+        :param is_valid: Se o track é válido para envio ao FindFace.
         """
         try:
             # Cria uma cópia do frame para desenhar
@@ -330,17 +377,27 @@ class ByteTrackDetectorService:
             
             x1, y1, x2, y2 = event.bbox.value()
             
-            # Cor do bbox: verde se houver movimento, amarelo se não houver
-            bbox_color = (0, 255, 0) if has_movement else (0, 255, 255)
+            # Cor do bbox baseada na validade:
+            # - Vermelho: inválido
+            # - Verde: válido com movimento
+            # - Amarelo: válido sem movimento (caso não usado, mantido para consistência)
+            if not is_valid:
+                bbox_color = (0, 0, 255)  # Vermelho para inválidos
+                status_label = "INVALID"
+            elif has_movement:
+                bbox_color = (0, 255, 0)  # Verde para válidos com movimento
+                status_label = "VALID"
+            else:
+                bbox_color = (0, 255, 255)  # Amarelo para válidos sem movimento
+                status_label = "STATIC"
             
             # Desenha bbox
             cv2.rectangle(frame_with_bbox, (x1, y1), (x2, y2), bbox_color, 2)
             
             # Label
-            movement_label = "MOV" if has_movement else "STATIC"
             label = (
                 f"Track {track_id} | "
-                f"{movement_label} | "
+                f"{status_label} | "
                 f"Quality: {event.face_quality_score.value():.4f} | "
                 f"Conf: {event.confidence.value():.2f}"
             )
@@ -359,14 +416,22 @@ class ByteTrackDetectorService:
                 (x1, y1 - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
-                (0, 0, 0),
+                (255, 255, 255),  # Texto branco para melhor contraste
                 2
             )
             
             # Nome do arquivo
             timestamp_str = event.frame.timestamp.value().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-            movement_prefix = "MOV" if has_movement else "STATIC"
-            filename = f"{movement_prefix}_Track_{track_id}_{timestamp_str}.jpg"
+            
+            # Prefixo baseado na validade
+            if not is_valid:
+                prefix = "INVALID"
+            elif has_movement:
+                prefix = "VALID"
+            else:
+                prefix = "STATIC"
+            
+            filename = f"{prefix}_Track_{track_id}_{timestamp_str}.jpg"
             
             # Diretório
             from pathlib import Path
@@ -376,8 +441,9 @@ class ByteTrackDetectorService:
             # Salva
             cv2.imwrite(str(filepath), frame_with_bbox, [cv2.IMWRITE_JPEG_QUALITY, 95])
             
+            status_msg = "VÁLIDO" if is_valid else "INVÁLIDO"
             self.logger.info(
-                f"Melhor face salva: {filename} "
+                f"Melhor face salva ({status_msg}): {filename} "
                 f"(quality={event.face_quality_score.value():.4f}, "
                 f"conf={event.confidence.value():.2f}) | "
                 f"Total de eventos: {total_events}"

@@ -80,7 +80,8 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
             project_dir=settings.storage.project_dir,
             results_dir=settings.storage.results_dir,
             min_movement_threshold=settings.movement.min_movement_threshold_pixels,
-            min_movement_percentage=settings.movement.min_movement_frame_percentage
+            min_movement_percentage=settings.movement.min_movement_frame_percentage,
+            min_confidence_threshold=settings.validation.min_confidence
         )
         processors.append(processor)
 

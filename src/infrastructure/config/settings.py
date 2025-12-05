@@ -66,6 +66,12 @@ class MovementConfig:
 
 
 @dataclass
+class ValidationConfig:
+    """Configuração de validação de tracks."""
+    min_confidence: float = 0.45
+
+
+@dataclass
 class AppSettings:
     """
     Configurações completas da aplicação.
@@ -77,6 +83,7 @@ class AppSettings:
     processing: ProcessingConfig
     storage: StorageConfig
     movement: MovementConfig
+    validation: ValidationConfig
     cameras: List[CameraConfig]
     
     @property

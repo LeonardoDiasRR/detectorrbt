@@ -18,6 +18,7 @@ from .settings import (
     ProcessingConfig,
     StorageConfig,
     CameraConfig,
+    ValidationConfig,
     MovementConfig
 )
 
@@ -110,6 +111,10 @@ class ConfigLoader:
             min_movement_frame_percentage=yaml_config.get("movimento", {}).get("percentual_minimo_frames", 0.1)
         )
         
+        validation_config = ValidationConfig(
+            min_confidence=yaml_config.get("validacao", {}).get("confianca_minima", 0.45)
+        )
+        
         # Carrega câmeras do YAML
         cameras = [
             CameraConfig(
@@ -128,5 +133,6 @@ class ConfigLoader:
             processing=processing_config,
             storage=storage_config,
             movement=movement_config,
+            validation=validation_config,
             cameras=cameras
         )

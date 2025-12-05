@@ -134,17 +134,22 @@ class Track:
         Analisa se houve movimento significativo durante o track.
         
         Algoritmo:
-        1. Calcula o centro de cada bbox em todos os eventos
-        2. Calcula a distância euclidiana entre centros consecutivos
-        3. Conta quantos frames tiveram movimento acima do limiar
-        4. Retorna True se o percentual de frames com movimento >= min_frame_percentage
+        1. Se o track tiver apenas 1 evento, considera como movimento (retorna True)
+        2. Calcula o centro de cada bbox em todos os eventos
+        3. Calcula a distância euclidiana entre centros consecutivos
+        4. Conta quantos frames tiveram movimento acima do limiar
+        5. Retorna True se o percentual de frames com movimento >= min_frame_percentage
         
         :param min_threshold_pixels: Limiar mínimo em pixels para considerar movimento.
         :param min_frame_percentage: Percentual mínimo de frames com movimento (0.0 a 1.0).
         :return: True se houver movimento significativo, False caso contrário.
         """
+        if self.event_count == 1:
+            # Track com apenas 1 evento é considerado como tendo movimento
+            return True
+        
         if self.event_count < 2:
-            # Não é possível detectar movimento com menos de 2 eventos
+            # Track vazio não tem movimento
             return False
         
         import math
