@@ -65,7 +65,7 @@ prefixo_grupo_camera_findface: "TESTE"
 tensorrt:
   # Habilita o uso de TensorRT se disponível (requer CUDA)
   # TensorRT tem precedência sobre OpenVINO quando GPU CUDA está disponível
-  enabled: true
+  enabled: false
   # Precisão: FP16 (recomendado), FP32, INT8
   precision: "FP16"
   # Workspace em GB para otimizações TensorRT (padrão: 4GB)

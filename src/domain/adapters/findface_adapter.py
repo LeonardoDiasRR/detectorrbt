@@ -99,9 +99,24 @@ class FindfaceAdapter:
             # Converte frame para JPEG
             imagem_bytes = event.frame.jpg(quality=95)
             
-            # Converte bbox para formato ROI [left, top, right, bottom]
+            # Expande bbox em 20% na diagonal
             x1, y1, x2, y2 = event.bbox.value()
-            roi = [int(x1), int(y1), int(x2), int(y2)]
+            width = x2 - x1
+            height = y2 - y1
+            
+            # Calcula expansão de 20% em cada direção
+            expand_w = width * 0.20
+            expand_h = height * 0.20
+            
+            # Aplica expansão mantendo dentro dos limites do frame
+            frame_height, frame_width = event.frame.ndarray.shape[:2]
+            x1_expanded = max(0, x1 - expand_w)
+            y1_expanded = max(0, y1 - expand_h)
+            x2_expanded = min(frame_width, x2 + expand_w)
+            y2_expanded = min(frame_height, y2 + expand_h)
+            
+            # Converte bbox expandido para formato ROI [left, top, right, bottom]
+            roi = [int(x1_expanded), int(y1_expanded), int(x2_expanded), int(y2_expanded)]
             
             # Converte timestamp para formato ISO 8601 com timezone local
             timestamp_iso = event.frame.timestamp.value().astimezone().isoformat()
