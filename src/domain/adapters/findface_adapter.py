@@ -103,8 +103,8 @@ class FindfaceAdapter:
             x1, y1, x2, y2 = event.bbox.value()
             roi = [int(x1), int(y1), int(x2), int(y2)]
             
-            # Converte timestamp para formato ISO 8601
-            timestamp_iso = event.frame.timestamp.value().isoformat()
+            # Converte timestamp para formato ISO 8601 com timezone local
+            timestamp_iso = event.frame.timestamp.value().astimezone().isoformat()
             
             # Envia para FindFace
             resposta = self.findface.add_face_event(

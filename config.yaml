@@ -13,7 +13,7 @@ max_frames_lost: 30
 max_frames_por_track: 900
 
 # Modelo de detecção facial
-face_detection_model: "yolov8n-face.pt"
+face_detection_model: "yolov12n-face.pt" # "yolov8n-face.pt"
 
 # Modelo de rastreamento
 # Opções:
@@ -26,7 +26,7 @@ conf: 0.1  # Valor padrão: 0.1 igual o do algoritmo ByteTrack
 iou: 0.2 # Mais permissivo, mantêm o track por mais tempo
 
 # Exibir na tela
-show: false
+show: true
 
 # Pesos na escolha da melhor face do track
 qualidade_face:
@@ -60,4 +60,13 @@ validacao:
 
 # Prefixo dos grupos de câmeras no FindFace
 prefixo_grupo_camera_findface: "TESTE"
+
+# Configurações OpenVINO
+openvino:
+  # Habilita o uso de OpenVINO se disponível
+  enabled: true
+  # Dispositivo OpenVINO: AUTO (seleção automática), CPU, GPU, NPU
+  device: "AUTO"
+  # Precisão: FP16 (recomendado), FP32, INT8
+  precision: "FP16"
 

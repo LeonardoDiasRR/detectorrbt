@@ -19,7 +19,8 @@ from .settings import (
     StorageConfig,
     CameraConfig,
     ValidationConfig,
-    MovementConfig
+    MovementConfig,
+    OpenVINOConfig
 )
 
 
@@ -58,10 +59,10 @@ class ConfigLoader:
             raise ValueError(f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing_vars)}")
         
         return FindFaceConfig(
-            url_base=os.getenv("FINDFACE_URL"),
-            user=os.getenv("FINDFACE_USER"),
-            password=os.getenv("FINDFACE_PASSWORD"),
-            uuid=os.getenv("FINDFACE_UUID")
+            url_base=os.getenv("FINDFACE_URL", ""),
+            user=os.getenv("FINDFACE_USER", ""),
+            password=os.getenv("FINDFACE_PASSWORD", ""),
+            uuid=os.getenv("FINDFACE_UUID", "")
         )
     
     @classmethod
@@ -116,6 +117,13 @@ class ConfigLoader:
             min_confidence=yaml_config.get("validacao", {}).get("confianca_minima", 0.45)
         )
         
+        # Configuração OpenVINO
+        openvino_config = OpenVINOConfig(
+            enabled=yaml_config.get("openvino", {}).get("enabled", True),
+            device=yaml_config.get("openvino", {}).get("device", "AUTO"),
+            precision=yaml_config.get("openvino", {}).get("precision", "FP16")
+        )
+        
         # Carrega câmeras do YAML
         cameras = [
             CameraConfig(
@@ -135,5 +143,6 @@ class ConfigLoader:
             storage=storage_config,
             movement=movement_config,
             validation=validation_config,
+            openvino=openvino_config,
             cameras=cameras
         )

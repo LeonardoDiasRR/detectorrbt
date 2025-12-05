@@ -12,12 +12,12 @@ import time
 # 3rd party
 import numpy as np
 import cv2
-from ultralytics import YOLO
 
 # local
 from src.domain.adapters.findface_adapter import FindfaceAdapter
 from src.domain.entities import Camera, Frame, Event, Track
 from src.domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO, TimestampVO
+from src.domain.services.model_interface import IDetectionModel
 
 
 class ByteTrackDetectorService:
@@ -29,7 +29,7 @@ class ByteTrackDetectorService:
     def __init__(
         self,
         camera: Camera,
-        yolo_model: YOLO,
+        detection_model: IDetectionModel,  # ALTERADO de yolo_model
         findface_adapter: Optional[FindfaceAdapter] = None,
         tracker: str = "bytetrack.yaml",
         batch: int = 4,
@@ -50,7 +50,7 @@ class ByteTrackDetectorService:
         Inicializa o serviço de detecção de faces.
 
         :param camera: Entidade Camera com informações da câmera.
-        :param yolo_model: Modelo YOLO para detecção de faces.
+        :param detection_model: Modelo YOLO para detecção de faces.
         :param findface_adapter: Adapter para comunicação com FindFace (opcional).
         :param tracker: Arquivo de configuração do tracker ByteTrack.
         :param batch: Tamanho do batch para processamento.
@@ -78,7 +78,7 @@ class ByteTrackDetectorService:
         cv2.setLogLevel(0)
         
         self.camera = camera
-        self.model = yolo_model
+        self.model = detection_model  # ALTERADO
         self.findface_adapter = findface_adapter
         self.tracker = tracker
         self.batch = batch
@@ -484,6 +484,10 @@ class ByteTrackDetectorService:
         :param event: Melhor evento do track.
         :param total_events: Total de eventos no track.
         """
+        if self.findface_adapter is None:
+            self.logger.warning(f"FindFace adapter não configurado. Track {track_id} não será enviado.")
+            return
+            
         try:
             # Envia para FindFace usando o adapter
             resposta = self.findface_adapter.send_event(event)

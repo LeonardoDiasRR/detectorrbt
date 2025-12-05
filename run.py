@@ -3,9 +3,6 @@ import os
 import logging
 import traceback
 
-# 3rd party
-from ultralytics import YOLO
-
 # local
 from src.infrastructure import ConfigLoader, AppSettings
 from src.infrastructure.external.findface_client import create_findface_client
@@ -13,6 +10,7 @@ from src.domain.adapters import FindfaceAdapter
 from src.domain.services import ByteTrackDetectorService
 from src.domain.entities import Camera
 from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
+from src.infrastructure.model import ModelFactory
 
 # Configura logging
 log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
@@ -42,12 +40,24 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     
     processors = []
 
-    # Carrega modelo YOLO
+    # Carrega modelo usando a factory
     try:
-        yolo_model = YOLO(settings.yolo.model_path)
-        logger.info(f"Modelo YOLO carregado: {settings.yolo.model_path} no dispositivo {settings.device}")
+        detection_model = ModelFactory.create_model(
+            model_path=settings.yolo.model_path,
+            use_openvino=settings.openvino.enabled,
+            openvino_device=settings.openvino.device,
+            openvino_precision=settings.openvino.precision
+        )
+        
+        model_info = detection_model.get_model_info()
+        logger.info(
+            f"Modelo carregado com sucesso: "
+            f"backend={model_info['backend']}, "
+            f"device={model_info['device']}, "
+            f"precision={model_info['precision']}"
+        )
     except Exception as e:
-        logger.error(f"Erro ao carregar modelo YOLO: {e}")
+        logger.error(f"Erro ao carregar modelo: {e}")
         return
     
     # Obtém câmeras usando o adapter
@@ -68,7 +78,7 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     for camera in cameras_ff:
         processor = ByteTrackDetectorService(
             camera=camera,
-            yolo_model=yolo_model,
+            detection_model=detection_model,  # ALTERADO
             findface_adapter=findface_adapter,
             tracker=settings.bytetrack.tracker_config,
             batch=settings.batch_size,

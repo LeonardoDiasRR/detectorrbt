@@ -73,6 +73,14 @@ class ValidationConfig:
 
 
 @dataclass
+class OpenVINOConfig:
+    """Configuração do OpenVINO."""
+    enabled: bool = True
+    device: str = "AUTO"  # AUTO, CPU, GPU, NPU
+    precision: str = "FP16"  # FP16, FP32, INT8
+
+
+@dataclass
 class AppSettings:
     """
     Configurações completas da aplicação.
@@ -85,6 +93,7 @@ class AppSettings:
     storage: StorageConfig
     movement: MovementConfig
     validation: ValidationConfig
+    openvino: OpenVINOConfig  # NOVO
     cameras: List[CameraConfig]
     
     @property
