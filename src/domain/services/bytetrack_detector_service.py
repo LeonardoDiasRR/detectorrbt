@@ -40,7 +40,9 @@ class ByteTrackDetectorService:
         max_frames_lost: int = 30,
         verbose_log: bool = False,
         project_dir: str = "./imagens/",
-        results_dir: str = "rtsp_byte_track_results"
+        results_dir: str = "rtsp_byte_track_results",
+        min_movement_threshold: float = 50.0,
+        min_movement_percentage: float = 0.3
     ):
         """
         Inicializa o serviço de detecção de faces.
@@ -58,6 +60,8 @@ class ByteTrackDetectorService:
         :param verbose_log: Se deve exibir logs detalhados.
         :param project_dir: Diretório base para salvamento de imagens.
         :param results_dir: Nome do subdiretório para resultados.
+        :param min_movement_threshold: Limite mínimo de movimento em pixels.
+        :param min_movement_percentage: Percentual mínimo de frames com movimento.
         :raises TypeError: Se camera não for do tipo Camera.
         """
         if not isinstance(camera, Camera):
@@ -82,6 +86,8 @@ class ByteTrackDetectorService:
         self.verbose_log = verbose_log
         self.project_dir = project_dir
         self.results_dir = results_dir
+        self.min_movement_threshold = min_movement_threshold
+        self.min_movement_percentage = min_movement_percentage
         self.running = False
         
         self.logger = logging.getLogger(
@@ -272,9 +278,21 @@ class ByteTrackDetectorService:
             del self.track_frames_lost[track_id]
             return
         
+        # Verifica se houve movimento
+        has_movement = track.has_movement(
+            min_threshold_pixels=self.min_movement_threshold,
+            min_frame_percentage=self.min_movement_percentage
+        )
+        
+        # Obtém estatísticas de movimento
+        movement_stats = track.get_movement_statistics()
+        
         self.logger.info(
             f"Track {track_id} finalizado após {self.track_frames_lost[track_id]} frames perdidos. "
-            f"Total de eventos: {track.event_count}"
+            f"Total de eventos: {track.event_count} | "
+            f"Movimento detectado: {has_movement} | "
+            f"Distância média: {movement_stats['average_distance']:.2f}px | "
+            f"Distância máxima: {movement_stats['max_distance']:.2f}px"
         )
         
         # Remove track da memória ANTES de processar
@@ -289,19 +307,22 @@ class ByteTrackDetectorService:
             return
         
         # Salva melhor face
-        self._save_best_event(track_id, best_event, track.event_count)
+        self._save_best_event(track_id, best_event, track.event_count, has_movement)
         
-        # Envia para FindFace
-        if self.findface_adapter is not None:
+        # Envia para FindFace apenas se houver movimento
+        if self.findface_adapter is not None and has_movement:
             self._send_best_event_to_findface(track_id, best_event, track.event_count)
+        elif not has_movement:
+            self.logger.info(f"Track {track_id} descartado: sem movimento significativo")
 
-    def _save_best_event(self, track_id: int, event: Event, total_events: int):
+    def _save_best_event(self, track_id: int, event: Event, total_events: int, has_movement: bool):
         """
         Salva o melhor evento do track em disco com bbox desenhado.
         
         :param track_id: ID do track.
         :param event: Melhor evento do track.
         :param total_events: Total de eventos no track.
+        :param has_movement: Se o track teve movimento significativo.
         """
         try:
             # Cria uma cópia do frame para desenhar
@@ -309,12 +330,17 @@ class ByteTrackDetectorService:
             
             x1, y1, x2, y2 = event.bbox.value()
             
-            # Desenha bbox verde
-            cv2.rectangle(frame_with_bbox, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # Cor do bbox: verde se houver movimento, amarelo se não houver
+            bbox_color = (0, 255, 0) if has_movement else (0, 255, 255)
+            
+            # Desenha bbox
+            cv2.rectangle(frame_with_bbox, (x1, y1), (x2, y2), bbox_color, 2)
             
             # Label
+            movement_label = "MOV" if has_movement else "STATIC"
             label = (
                 f"Track {track_id} | "
+                f"{movement_label} | "
                 f"Quality: {event.face_quality_score.value():.4f} | "
                 f"Conf: {event.confidence.value():.2f}"
             )
@@ -324,7 +350,7 @@ class ByteTrackDetectorService:
                 frame_with_bbox,
                 (x1, y1 - label_size[1] - 10),
                 (x1 + label_size[0], y1),
-                (0, 255, 0),
+                bbox_color,
                 -1
             )
             cv2.putText(
@@ -339,7 +365,8 @@ class ByteTrackDetectorService:
             
             # Nome do arquivo
             timestamp_str = event.frame.timestamp.value().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-            filename = f"Track_{track_id}_{timestamp_str}.jpg"
+            movement_prefix = "MOV" if has_movement else "STATIC"
+            filename = f"{movement_prefix}_Track_{track_id}_{timestamp_str}.jpg"
             
             # Diretório
             from pathlib import Path

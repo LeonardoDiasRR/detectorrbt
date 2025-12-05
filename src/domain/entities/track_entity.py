@@ -125,6 +125,104 @@ class Track:
         total_quality = sum(event.face_quality_score.value() for event in self._events)
         return total_quality / len(self._events)
 
+    def has_movement(
+        self,
+        min_threshold_pixels: float = 50.0,
+        min_frame_percentage: float = 0.3
+    ) -> bool:
+        """
+        Analisa se houve movimento significativo durante o track.
+        
+        Algoritmo:
+        1. Calcula o centro de cada bbox em todos os eventos
+        2. Calcula a distância euclidiana entre centros consecutivos
+        3. Conta quantos frames tiveram movimento acima do limiar
+        4. Retorna True se o percentual de frames com movimento >= min_frame_percentage
+        
+        :param min_threshold_pixels: Limiar mínimo em pixels para considerar movimento.
+        :param min_frame_percentage: Percentual mínimo de frames com movimento (0.0 a 1.0).
+        :return: True se houver movimento significativo, False caso contrário.
+        """
+        if self.event_count < 2:
+            # Não é possível detectar movimento com menos de 2 eventos
+            return False
+        
+        import math
+        
+        # Calcula centros de todos os bboxes
+        centers = []
+        for event in self._events:
+            x1, y1, x2, y2 = event.bbox.value()
+            center_x = (x1 + x2) / 2.0
+            center_y = (y1 + y2) / 2.0
+            centers.append((center_x, center_y))
+        
+        # Calcula distâncias entre centros consecutivos
+        movements_detected = 0
+        total_comparisons = len(centers) - 1
+        
+        for i in range(total_comparisons):
+            x1, y1 = centers[i]
+            x2, y2 = centers[i + 1]
+            
+            # Distância euclidiana
+            distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+            
+            if distance >= min_threshold_pixels:
+                movements_detected += 1
+        
+        # Calcula percentual de frames com movimento
+        movement_percentage = movements_detected / total_comparisons
+        
+        # Retorna True se o percentual de movimento >= limiar mínimo
+        return movement_percentage >= min_frame_percentage
+    
+    def get_movement_statistics(self) -> Dict[str, float]:
+        """
+        Retorna estatísticas detalhadas sobre o movimento no track.
+        
+        :return: Dicionário com estatísticas de movimento.
+        """
+        if self.event_count < 2:
+            return {
+                'total_distance': 0.0,
+                'average_distance': 0.0,
+                'max_distance': 0.0,
+                'min_distance': 0.0,
+                'movement_detected': False
+            }
+        
+        import math
+        
+        # Calcula centros de todos os bboxes
+        centers = []
+        for event in self._events:
+            x1, y1, x2, y2 = event.bbox.value()
+            center_x = (x1 + x2) / 2.0
+            center_y = (y1 + y2) / 2.0
+            centers.append((center_x, center_y))
+        
+        # Calcula todas as distâncias
+        distances = []
+        for i in range(len(centers) - 1):
+            x1, y1 = centers[i]
+            x2, y2 = centers[i + 1]
+            distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+            distances.append(distance)
+        
+        total_distance = sum(distances)
+        average_distance = total_distance / len(distances)
+        max_distance = max(distances)
+        min_distance = min(distances)
+        
+        return {
+            'total_distance': total_distance,
+            'average_distance': average_distance,
+            'max_distance': max_distance,
+            'min_distance': min_distance,
+            'movement_detected': max_distance > 0.0
+        }
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Converte a entidade para um dicionário.

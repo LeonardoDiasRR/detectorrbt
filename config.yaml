@@ -38,3 +38,16 @@ verbose_log: false
 
 # Prefixo para os grupos de câmeras no FindFace
 prefixo_grupo_camera_findface: "TESTE"
+
+# Diretório de saída para as imagens
+project: "./imagens/"
+name: "rtsp_byte_track_results"
+
+# Detecção de movimento no track
+movimento:
+  # Limiar mínimo de variação em pixels para considerar movimento
+  # Calcula-se a distância euclidiana média entre centros dos bboxes consecutivos
+  limiar_minimo_pixels: 2.0
+  # Percentual mínimo de frames com movimento (0.0 a 1.0)
+  # Se menos que esse percentual tiver movimento, considera sem movimento
+  percentual_minimo_frames: 0.1

@@ -78,7 +78,9 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
             max_frames_lost=settings.bytetrack.max_frames_lost,
             verbose_log=settings.processing.verbose_log,
             project_dir=settings.storage.project_dir,
-            results_dir=settings.storage.results_dir
+            results_dir=settings.storage.results_dir,
+            min_movement_threshold=settings.movement.min_movement_threshold_pixels,
+            min_movement_percentage=settings.movement.min_movement_frame_percentage
         )
         processors.append(processor)
 

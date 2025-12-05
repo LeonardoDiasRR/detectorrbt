@@ -59,6 +59,13 @@ class StorageConfig:
 
 
 @dataclass
+class MovementConfig:
+    """Configuração de detecção de movimento."""
+    min_movement_threshold_pixels: float = 50.0
+    min_movement_frame_percentage: float = 0.3
+
+
+@dataclass
 class AppSettings:
     """
     Configurações completas da aplicação.
@@ -69,6 +76,7 @@ class AppSettings:
     bytetrack: ByteTrackConfig
     processing: ProcessingConfig
     storage: StorageConfig
+    movement: MovementConfig
     cameras: List[CameraConfig]
     
     @property

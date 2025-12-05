@@ -17,7 +17,8 @@ from .settings import (
     ByteTrackConfig,
     ProcessingConfig,
     StorageConfig,
-    CameraConfig
+    CameraConfig,
+    MovementConfig
 )
 
 
@@ -104,6 +105,11 @@ class ConfigLoader:
             results_dir=yaml_config.get("name", "rtsp_byte_track_results")
         )
         
+        movement_config = MovementConfig(
+            min_movement_threshold_pixels=yaml_config.get("movimento", {}).get("limiar_minimo_pixels", 5.0),
+            min_movement_frame_percentage=yaml_config.get("movimento", {}).get("percentual_minimo_frames", 0.1)
+        )
+        
         # Carrega câmeras do YAML
         cameras = [
             CameraConfig(
@@ -121,5 +127,6 @@ class ConfigLoader:
             bytetrack=bytetrack_config,
             processing=processing_config,
             storage=storage_config,
+            movement=movement_config,
             cameras=cameras
         )
