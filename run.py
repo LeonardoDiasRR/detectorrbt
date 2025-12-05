@@ -18,12 +18,64 @@ from src.infrastructure.model import ModelFactory
 # Suprimir avisos do OpenCV e Ultralytics
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
 os.environ['YOLO_VERBOSE'] = 'False'
+# Aplicar supressão mais segura de mensagens conhecidas enviadas para stderr
+# - mantém stderr visível para erros críticos
+# - filtra apenas linhas conhecidas, como 'Waiting for stream'
+import warnings
 
-# Redirecionar stderr para /dev/null (Linux) ou NUL (Windows)
-if sys.platform.startswith('linux') or sys.platform == 'darwin':
-    sys.stderr = open('/dev/null', 'w')
-elif sys.platform == 'win32':
-    sys.stderr = open('NUL', 'w')
+# Filtrar avisos do módulo warnings que tenham mensagem específica
+warnings.filterwarnings('ignore', message=r'.*Waiting for stream.*')
+
+# Reduz nível de log para bibliotecas verbosas quando possível
+logging.getLogger('ultralytics').setLevel(logging.ERROR)
+logging.getLogger('ultralytics.engine').setLevel(logging.ERROR)
+
+
+class _StderrFilter:
+    """Wrapper para sys.stderr que filtra linhas específicas antes de escrevê-las.
+
+    Mantém o comportamento original para a maior parte do output, apenas omite
+    mensagens que contenham o texto 'Waiting for stream'. Isso evita suprimir
+    outros erros importantes.
+    """
+    def __init__(self, orig):
+        self._orig = orig
+
+    def write(self, data):
+        try:
+            text = data.decode('utf-8', errors='ignore') if isinstance(data, (bytes, bytearray)) else str(data)
+            # Filtra linhas indesejadas
+            if 'Waiting for stream' in text:
+                return
+            # Passa adiante
+            self._orig.write(data)
+        except Exception:
+            # Em caso de erro no filtro, escreve o conteúdo original para não perder mensagens
+            try:
+                self._orig.write(data)
+            except Exception:
+                pass
+
+    def flush(self):
+        try:
+            self._orig.flush()
+        except Exception:
+            pass
+
+    def fileno(self):
+        return getattr(self._orig, 'fileno', lambda: None)()
+
+    def isatty(self):
+        return getattr(self._orig, 'isatty', lambda: False)()
+
+
+# Substitui sys.stderr por um filtro leve apenas em plataformas Unix-like
+try:
+    if sys.platform.startswith('linux') or sys.platform == 'darwin':
+        sys.stderr = _StderrFilter(sys.stderr)
+except Exception:
+    # Se ocorrer qualquer problema, não quebra a inicialização
+    pass
 
 # Configura logging com rotação
 log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
