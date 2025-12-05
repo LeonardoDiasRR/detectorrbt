@@ -2,6 +2,8 @@
 import os
 import logging
 import traceback
+import threading
+from logging.handlers import RotatingFileHandler
 
 # local
 from src.infrastructure import ConfigLoader, AppSettings
@@ -12,15 +14,28 @@ from src.domain.entities import Camera
 from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
 from src.infrastructure.model import ModelFactory
 
-# Configura logging
+# Configura logging com rotação
 log_file = os.path.join(os.path.dirname(__file__), "detectorrbt.log")
+
+# Handler com rotação: 2MB por arquivo, máximo 3 backups (compactados)
+file_handler = RotatingFileHandler(
+    log_file,
+    maxBytes=2 * 1024 * 1024,  # 2MB
+    backupCount=3,
+    encoding='utf-8'
+)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+# Handler para console
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+# Configura root logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file, mode='w', encoding='utf-8'),
-        logging.StreamHandler()
-    ],
+    handlers=[file_handler, console_handler],
     force=True
 )
 
@@ -39,30 +54,6 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     logger.info(f"Diretório '{imagens_dir}' criado.")
     
     processors = []
-
-    # Carrega modelo usando a factory
-    try:
-        detection_model = ModelFactory.create_model(
-            model_path=settings.yolo.model_path,
-            use_tensorrt=settings.tensorrt.enabled,
-            tensorrt_precision=settings.tensorrt.precision,
-            tensorrt_workspace=settings.tensorrt.workspace,
-            use_openvino=settings.openvino.enabled,
-            openvino_device=settings.openvino.device,
-            openvino_precision=settings.openvino.precision
-        )
-        
-        model_info = detection_model.get_model_info()
-        logger.info(
-            f"Modelo carregado com sucesso: "
-            f"backend={model_info['backend']}, "
-            f"device={model_info['device']}, "
-            f"precision={model_info['precision']}, "
-            f"optimization={model_info.get('optimization', 'None')}"
-        )
-    except Exception as e:
-        logger.error(f"Erro ao carregar modelo: {e}")
-        return
     
     # Obtém câmeras usando o adapter
     cameras_ff = findface_adapter.get_cameras()
@@ -78,35 +69,104 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
         )
         cameras_ff.append(camera)
     
-    # Cria serviços de detecção
-    for camera in cameras_ff:
-        processor = ByteTrackDetectorService(
-            camera=camera,
-            detection_model=detection_model,  # ALTERADO
-            findface_adapter=findface_adapter,
-            tracker=settings.bytetrack.tracker_config,
-            batch=settings.batch_size,
-            show=settings.processing.show_video,
-            conf=settings.yolo.conf_threshold,
-            iou=settings.yolo.iou_threshold,
-            max_frames_lost=settings.bytetrack.max_frames_lost,
-            verbose_log=settings.processing.verbose_log,
-            project_dir=settings.storage.project_dir,
-            results_dir=settings.storage.results_dir,
-            min_movement_threshold=settings.movement.min_movement_threshold_pixels,
-            min_movement_percentage=settings.movement.min_movement_frame_percentage,
-            min_confidence_threshold=settings.validation.min_confidence,
-            max_frames_per_track=settings.bytetrack.max_frames_per_track  # ATUALIZADO
-        )
-        processors.append(processor)
-
+    logger.info(f"Total de {len(cameras_ff)} câmera(s) para processar.")
+    
+    # Cria serviços de detecção - CADA CÂMERA COM SEU PRÓPRIO MODELO
+    for i, camera in enumerate(cameras_ff, 1):
+        try:
+            # IMPORTANTE: Cria uma instância SEPARADA do modelo para cada câmera
+            # Isso evita conflitos de thread-safety
+            logger.info(f"[{i}/{len(cameras_ff)}] Carregando modelo para câmera {camera.camera_name.value()}...")
+            
+            detection_model = ModelFactory.create_model(
+                model_path=settings.yolo.model_path,
+                use_tensorrt=settings.tensorrt.enabled,
+                tensorrt_precision=settings.tensorrt.precision,
+                tensorrt_workspace=settings.tensorrt.workspace,
+                use_openvino=settings.openvino.enabled,
+                openvino_device=settings.openvino.device,
+                openvino_precision=settings.openvino.precision
+            )
+            
+            model_info = detection_model.get_model_info()
+            logger.info(
+                f"[{i}/{len(cameras_ff)}] Modelo carregado: "
+                f"backend={model_info['backend']}, "
+                f"device={model_info['device']}, "
+                f"precision={model_info['precision']}"
+            )
+            
+            processor = ByteTrackDetectorService(
+                camera=camera,
+                detection_model=detection_model,
+                findface_adapter=findface_adapter,
+                tracker=settings.bytetrack.tracker_config,
+                batch=settings.batch_size,
+                show=settings.processing.show_video,
+                conf=settings.yolo.conf_threshold,
+                iou=settings.yolo.iou_threshold,
+                max_frames_lost=settings.bytetrack.max_frames_lost,
+                verbose_log=settings.processing.verbose_log,
+                save_images=settings.storage.save_images,
+                project_dir=settings.storage.project_dir,
+                results_dir=settings.storage.results_dir,
+                min_movement_threshold=settings.movement.min_movement_threshold_pixels,
+                min_movement_percentage=settings.movement.min_movement_frame_percentage,
+                min_confidence_threshold=settings.validation.min_confidence,
+                max_frames_per_track=settings.bytetrack.max_frames_per_track
+            )
+            processors.append(processor)
+            
+        except Exception as e:
+            logger.error(f"Erro ao carregar modelo para câmera {camera.camera_name.value()}: {e}")
+            logger.warning(f"Câmera {camera.camera_name.value()} será ignorada.")
+            continue
+    
+    if not processors:
+        logger.error("Nenhuma câmera foi carregada com sucesso. Encerrando.")
+        return
+    
+    logger.info(f"Iniciando {len(processors)} processador(es) de câmera em paralelo...")
+    
+    # Inicia cada processador em uma thread separada
+    threads = []
     try:
-        for proc in processors:
-            proc.start()
+        for i, proc in enumerate(processors):
+            thread = threading.Thread(
+                target=proc.start,
+                name=f"Camera-{proc.camera.camera_id.value()}-{proc.camera.camera_name.value()}",
+                daemon=True
+            )
+            thread.start()
+            threads.append(thread)
+            logger.info(
+                f"Thread {i+1}/{len(processors)} iniciada: "
+                f"Camera {proc.camera.camera_name.value()} (ID: {proc.camera.camera_id.value()})"
+            )
+        
+        logger.info(f"Todas as {len(threads)} threads de câmera foram iniciadas com sucesso.")
+        logger.info("Pressione Ctrl+C para parar o processamento.")
+        
+        # Mantém o programa principal rodando com timeout para responder ao Ctrl+C
+        import time
+        while any(thread.is_alive() for thread in threads):
+            time.sleep(0.5)  # Verifica a cada 500ms se threads ainda estão vivas
+            
     except KeyboardInterrupt:
-        logger.info("Interrupção detectada. Finalizando...")
+        logger.info("\n⚠️  Interrupção detectada (Ctrl+C). Finalizando todas as câmeras...")
         for proc in processors:
             proc.stop()
+        
+        # Aguarda threads finalizarem (timeout de 5 segundos por thread)
+        logger.info("Aguardando threads finalizarem...")
+        for i, thread in enumerate(threads, 1):
+            thread.join(timeout=5.0)
+            if thread.is_alive():
+                logger.warning(f"Thread {i}/{len(threads)} não finalizou no tempo esperado.")
+            else:
+                logger.info(f"Thread {i}/{len(threads)} finalizada com sucesso.")
+        
+        logger.info("✓ Todas as câmeras foram finalizadas.")
 
 
 if __name__ == "__main__":

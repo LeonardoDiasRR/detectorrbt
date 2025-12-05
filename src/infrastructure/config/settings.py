@@ -55,6 +55,7 @@ class ProcessingConfig:
 @dataclass
 class StorageConfig:
     """Configuração de armazenamento."""
+    save_images: bool = True
     project_dir: str = "./imagens/"
     results_dir: str = "rtsp_byte_track_results"
 

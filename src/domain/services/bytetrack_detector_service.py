@@ -39,6 +39,7 @@ class ByteTrackDetectorService:
         iou: float = 0.2,
         max_frames_lost: int = 30,
         verbose_log: bool = False,
+        save_images: bool = True,
         project_dir: str = "./imagens/",
         results_dir: str = "rtsp_byte_track_results",
         min_movement_threshold: float = 50.0,
@@ -88,6 +89,7 @@ class ByteTrackDetectorService:
         self.iou = iou
         self.max_frames_lost = max_frames_lost
         self.verbose_log = verbose_log
+        self.save_images = save_images
         self.project_dir = project_dir
         self.results_dir = results_dir
         self.min_movement_threshold = min_movement_threshold
@@ -455,19 +457,23 @@ class ByteTrackDetectorService:
             else:
                 prefix = "STATIC"
             
-            filename = f"{prefix}_Track_{track_id}_{timestamp_str}.jpg"
+            # Sanitiza o nome da câmera para usar no filename (remove caracteres inválidos)
+            camera_name_clean = self.camera.camera_name.value().replace(" ", "-").replace("/", "-").replace("\\", "-")
+            camera_id = self.camera.camera_id.value()
             
-            # Diretório
-            from pathlib import Path
-            filepath = Path(self.project_dir) / self.results_dir / filename
-            filepath.parent.mkdir(parents=True, exist_ok=True)
+            filename = f"{prefix}_Camera-{camera_id}-{camera_name_clean}_Track_{track_id}_{timestamp_str}.jpg"
             
-            # Salva
-            cv2.imwrite(str(filepath), frame_with_bbox, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            # Salva no disco apenas se habilitado
+            if self.save_images:
+                from pathlib import Path
+                filepath = Path(self.project_dir) / self.results_dir / filename
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                cv2.imwrite(str(filepath), frame_with_bbox, [cv2.IMWRITE_JPEG_QUALITY, 95])
             
             status_msg = "VÁLIDO" if is_valid else "INVÁLIDO"
+            save_status = "salva" if self.save_images else "não salva (desabilitado)"
             self.logger.info(
-                f"Melhor face salva ({status_msg}): {filename} "
+                f"Melhor face {save_status} ({status_msg}): {filename} "
                 f"(quality={event.face_quality_score.value():.4f}, "
                 f"conf={event.confidence.value():.2f}) | "
                 f"Total de eventos: {total_events}"

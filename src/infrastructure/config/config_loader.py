@@ -105,8 +105,9 @@ class ConfigLoader:
         )
         
         storage_config = StorageConfig(
-            project_dir=yaml_config.get("project", "./imagens/"),
-            results_dir=yaml_config.get("name", "rtsp_byte_track_results")
+            save_images=yaml_config.get("salvamento_imagens", {}).get("habilitado", True),
+            project_dir=yaml_config.get("salvamento_imagens", {}).get("project", yaml_config.get("project", "./imagens/")),
+            results_dir=yaml_config.get("salvamento_imagens", {}).get("name", yaml_config.get("name", "rtsp_byte_track_results"))
         )
         
         movement_config = MovementConfig(

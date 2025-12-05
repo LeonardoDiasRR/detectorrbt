@@ -51,7 +51,7 @@ filterpy>=1.4.5
 lap>=0.5.12
 
 # Monitoramento de GPU (opcional)
-pynvml>=11.5.0  # Para monitorar uso de GPU NVIDIA
+nvidia-ml-py>=12.535.133  # Substitui pynvml (deprecated)
 gpustat>=1.1.1  # Para visualizar status da GPU
 
 # Performance profiling (opcional)
