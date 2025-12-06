@@ -42,7 +42,7 @@ verbose_log: false
 # Configurações de salvamento de imagens
 salvamento_imagens:
   # Ativa/desativa o salvamento de imagens no disco
-  habilitado: true
+  habilitado: false
   # Diretório de saída para as imagens
   project: "./imagens/"
   name: "rtsp_byte_track_results"
@@ -78,7 +78,7 @@ tensorrt:
 # Configurações OpenVINO
 openvino:
   # Habilita o uso de OpenVINO se disponível
-  enabled: true
+  enabled: false
   # Dispositivo OpenVINO: AUTO (seleção automática), CPU, GPU, NPU
   device: "AUTO"
   # Precisão: FP16 (recomendado), FP32, INT8
