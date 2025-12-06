@@ -7,11 +7,14 @@ Decide qual implementação usar baseado na disponibilidade do OpenVINO.
 import logging
 from typing import Optional
 from pathlib import Path
+import threading
 
 from src.domain.services.model_interface import IDetectionModel
-
+from ultralytics import YOLO
 
 logger = logging.getLogger(__name__)
+
+_model_init_lock = threading.Lock()
 
 
 class ModelFactory:
@@ -151,3 +154,9 @@ class ModelFactory:
         # 3. Fallback: usa implementação padrão YOLO
         logger.info("Carregando modelo com implementação padrão YOLO")
         return YOLOModelAdapter(model_path=str(model_path_obj))
+
+def create_yolo_model(model_path: str, **kwargs):
+    with _model_init_lock:
+        # dentro do lock fazemos a importação/instanciação que não é thread-safe
+        model = YOLO(model_path, **kwargs)
+    return model
