@@ -56,3 +56,10 @@ gpustat>=1.1.1  # Para visualizar status da GPU
 
 # Performance profiling (opcional)
 tensorboard>=2.13.0  # Para visualização de métricas
+
+# TensorRT para CUDA 13
+tensorrt-cu13
+
+# (Opcional) Versões compactas ou com despacho
+tensorrt-lean-cu13
+tensorrt-dispatch-cu13
