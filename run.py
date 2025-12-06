@@ -103,6 +103,21 @@ logging.basicConfig(
 )
 
 
+# run.py — antes de criar threads e antes de qualquer import pesado em threads
+import logging
+import importlib
+
+logger = logging.getLogger(__name__)
+try:
+    # importa ultralytics e o submódulo de callbacks para forçar inicialização sequencial
+    import ultralytics
+    importlib.import_module("ultralytics.utils.callbacks.hub")
+    logger.info("Ultralytics importado com sucesso no thread principal.")
+except Exception as e:
+    # não impedimos a execução, apenas logamos — threads ainda podem tentar novamente
+    logger.warning(f"Falha ao pré-importar ultralytics: {e}")
+
+
 def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     logger = logging.getLogger(__name__)
     
