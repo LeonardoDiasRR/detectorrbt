@@ -103,19 +103,40 @@ logging.basicConfig(
 )
 
 
-# run.py — antes de criar threads e antes de qualquer import pesado em threads
-import logging
+# run.py - topo (logo após imports básicos, ANTES de criar modelos/threads)
 import importlib
+import logging
+import sys
+import types
 
 logger = logging.getLogger(__name__)
+
 try:
-    # importa ultralytics e o submódulo de callbacks para forçar inicialização sequencial
+    # força import sequencial dos módulos ultralytics que geram probleminhas
     import ultralytics
+    # tenta importar os submódulos de callbacks de forma controlada
+    importlib.import_module("ultralytics.utils.callbacks.base")
+    importlib.import_module("ultralytics.utils.callbacks.platform")
     importlib.import_module("ultralytics.utils.callbacks.hub")
-    logger.info("Ultralytics importado com sucesso no thread principal.")
+    logger.info("Ultralytics e callbacks importados com sucesso no processo principal.")
 except Exception as e:
-    # não impedimos a execução, apenas logamos — threads ainda podem tentar novamente
-    logger.warning(f"Falha ao pré-importar ultralytics: {e}")
+    logger.warning(f"Falha no pré-import completo do ultralytics: {e}. Aplicando fallback seguro.")
+
+# Monkeypatch: torna add_integration_callbacks um no-op para evitar circular import em runtime
+try:
+    from ultralytics.utils import callbacks as _callbacks_pkg
+    # garante existência do módulo base
+    cb_base = getattr(_callbacks_pkg, "base", None) or getattr(sys.modules.get("ultralytics.utils.callbacks.base"), "__dict__", None)
+    if cb_base:
+        # define no-op de forma segura
+        def _noop_add_integration_callbacks(self):
+            return None
+        # aplica patch somente se a função existir (ou atribui)
+        setattr(_callbacks_pkg, "base", _callbacks_pkg.base if hasattr(_callbacks_pkg, "base") else types.ModuleType("ultralytics.utils.callbacks.base"))
+        _callbacks_pkg.base.add_integration_callbacks = _noop_add_integration_callbacks
+        logger.info("Callbacks do ultralytics substituídos por no-op para evitar import circular.")
+except Exception as e:
+    logger.warning(f"Não foi possível aplicar monkeypatch em callbacks do ultralytics: {e}")
 
 
 def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
