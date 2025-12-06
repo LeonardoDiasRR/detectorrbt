@@ -7,6 +7,7 @@ Implementa o padrão Adapter do DDD para isolar o domínio da infraestrutura ext
 from typing import List, Dict, Optional
 import logging
 import json
+import re
 
 # local
 from findface_multi import FindfaceMulti
@@ -141,40 +142,36 @@ class FindfaceAdapter:
             return resposta
 
         except Exception as e:
-            # Tenta extrair a mensagem 'desc' do payload retornado pelo servidor FindFace
+            # Extrai a linha 'desc: ...' do texto da exceção usando regex.
+            # Exemplo alvo no texto:
+            # "\ndesc: Zero objects(type=\"face\") detected on the provided image, param: fullframe\n"
             desc = None
             try:
-                # Se a exceção for um dicionário já
-                if isinstance(e, dict):
-                    desc = e.get("desc")
-                else:
-                    # Se a exception tiver .response (requests/http errors), tenta JSON
-                    resp = getattr(e, "response", None)
-                    if resp is not None:
-                        try:
-                            data = resp.json()
-                        except Exception:
-                            try:
-                                data = json.loads(getattr(resp, 'text', '') or '')
-                            except Exception:
-                                data = None
-                        if isinstance(data, dict):
-                            desc = data.get("desc")
+                # Obtém texto de resposta se disponível (requests.Response)
+                text = ""
+                resp = getattr(e, "response", None)
+                if resp is not None:
+                    try:
+                        text = getattr(resp, 'text', '') or ''
+                    except Exception:
+                        text = ''
 
-                    # Se ainda sem desc, tenta parsear a string da exceção como JSON
-                    if desc is None:
-                        try:
-                            parsed = json.loads(str(e))
-                            if isinstance(parsed, dict):
-                                desc = parsed.get("desc")
-                        except Exception:
-                            desc = None
+                # Se não houver .response text, usa representação da exceção
+                if not text:
+                    text = str(e)
+
+                # Regex procura 'desc:' até ', param:' ou fim/newline
+                m = re.search(r"desc:\s*(?P<desc>.+?)(?:,\s*param:|\\n|$)", text, flags=re.IGNORECASE)
+                if m:
+                    desc = m.group('desc').strip()
             except Exception:
                 desc = None
 
             if desc:
                 # Loga apenas o campo 'desc' conforme solicitado
-                self.logger.error(f"Erro ao enviar evento para FindFace - Camera: {event.camera_id.value()}: {desc}")
+                self.logger.error(
+                    f"Erro ao enviar evento para FindFace - Camera: {event.camera_id.value()}: {desc}"
+                )
             else:
                 # Fallback: log completo com stacktrace para investigação
                 self.logger.error(
