@@ -5,7 +5,7 @@ Entidade Frame do domínio.
 from typing import Optional, Tuple
 import numpy as np
 import cv2
-from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, TimestampVO
+from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, TimestampVO, FullFrameVO
 
 
 class Frame:
@@ -16,7 +16,7 @@ class Frame:
     def __init__(
         self,
         id: IdVO,
-        ndarray: np.ndarray,
+        full_frame: FullFrameVO,
         camera_id: IdVO,
         camera_name: NameVO,
         camera_token: CameraTokenVO,
@@ -26,22 +26,18 @@ class Frame:
         Inicializa a entidade Frame.
 
         :param id: ID único do frame (IdVO).
-        :param ndarray: Array numpy representando a imagem do frame.
+        :param full_frame: Frame completo como FullFrameVO.
         :param camera_id: ID da câmera que capturou o frame (IdVO).
         :param camera_name: Nome da câmera que capturou o frame (NameVO).
         :param camera_token: Token de autenticação da câmera (CameraTokenVO).
         :param timestamp: Timestamp de captura do frame (TimestampVO).
         :raises TypeError: Se algum parâmetro não for do tipo esperado.
-        :raises ValueError: Se o ndarray for inválido.
         """
         if not isinstance(id, IdVO):
             raise TypeError(f"id deve ser IdVO, recebido: {type(id).__name__}")
         
-        if not isinstance(ndarray, np.ndarray):
-            raise TypeError(f"ndarray deve ser np.ndarray, recebido: {type(ndarray).__name__}")
-        
-        if ndarray.size == 0:
-            raise ValueError("ndarray não pode ser vazio")
+        if not isinstance(full_frame, FullFrameVO):
+            raise TypeError(f"full_frame deve ser FullFrameVO, recebido: {type(full_frame).__name__}")
         
         if not isinstance(camera_id, IdVO):
             raise TypeError(f"camera_id deve ser IdVO, recebido: {type(camera_id).__name__}")
@@ -56,7 +52,7 @@ class Frame:
             raise TypeError(f"timestamp deve ser TimestampVO, recebido: {type(timestamp).__name__}")
         
         self._id = id
-        self._ndarray = ndarray
+        self._full_frame = full_frame
         self._camera_id = camera_id
         self._camera_name = camera_name
         self._camera_token = camera_token
@@ -68,9 +64,14 @@ class Frame:
         return self._id
 
     @property
+    def full_frame(self) -> FullFrameVO:
+        """Retorna o FullFrameVO do frame."""
+        return self._full_frame
+
+    @property
     def ndarray(self) -> np.ndarray:
-        """Retorna o array numpy do frame."""
-        return self._ndarray
+        """Retorna o array numpy do frame (cópia)."""
+        return self._full_frame.value()
 
     @property
     def camera_id(self) -> IdVO:
@@ -104,7 +105,7 @@ class Frame:
         if not 0 <= quality <= 100:
             raise ValueError(f"Qualidade deve estar entre 0 e 100, recebido: {quality}")
         
-        success, buffer = cv2.imencode('.jpg', self._ndarray, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        success, buffer = cv2.imencode('.jpg', self.ndarray, [cv2.IMWRITE_JPEG_QUALITY, quality])
         
         if not success:
             raise RuntimeError("Falha ao codificar o frame em JPEG")
@@ -114,27 +115,27 @@ class Frame:
     @property
     def shape(self) -> Tuple[int, ...]:
         """Retorna as dimensões do frame (altura, largura, canais)."""
-        return self._ndarray.shape
+        return self._full_frame.shape
 
     @property
     def height(self) -> int:
         """Retorna a altura do frame."""
-        return self._ndarray.shape[0]
+        return self._full_frame.height
 
     @property
     def width(self) -> int:
         """Retorna a largura do frame."""
-        return self._ndarray.shape[1]
+        return self._full_frame.width
 
     def copy(self) -> 'Frame':
         """
         Cria uma cópia do frame.
 
-        :return: Nova instância de Frame com ndarray copiado.
+        :return: Nova instância de Frame com FullFrameVO copiado.
         """
         return Frame(
             id=self._id,
-            ndarray=self._ndarray.copy(),
+            full_frame=FullFrameVO(self.ndarray),
             camera_id=self._camera_id,
             camera_name=self._camera_name,
             camera_token=self._camera_token,

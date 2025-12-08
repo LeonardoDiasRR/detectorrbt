@@ -10,6 +10,7 @@ from .bbox_vo import BboxVO
 from .confidence_vo import ConfidenceVO
 from .landmarks_vo import LandmarksVO
 from .timestamp_vo import TimestampVO
+from .full_frame_vo import FullFrameVO
 
 __all__ = [
     'IdVO',
@@ -20,4 +21,5 @@ __all__ = [
     'ConfidenceVO',
     'LandmarksVO',
     'TimestampVO',
+    'FullFrameVO',
 ]

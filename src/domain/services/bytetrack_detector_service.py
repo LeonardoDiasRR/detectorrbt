@@ -16,7 +16,7 @@ import cv2
 # local
 from src.domain.adapters.findface_adapter import FindfaceAdapter
 from src.domain.entities import Camera, Frame, Event, Track
-from src.domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO, TimestampVO
+from src.domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO, TimestampVO, FullFrameVO
 from src.domain.services.model_interface import IDetectionModel
 
 
@@ -213,7 +213,7 @@ class ByteTrackDetectorService:
         self._frame_id_counter += 1
         return Frame(
             id=IdVO(self._frame_id_counter),
-            ndarray=frame_array,
+            full_frame=FullFrameVO(frame_array),
             camera_id=self.camera.camera_id,
             camera_name=self.camera.camera_name,
             camera_token=self.camera.camera_token,
