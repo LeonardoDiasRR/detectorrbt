@@ -95,15 +95,17 @@ class FaceQualityService:
     def _calculate_sharpness_score(frame: Frame, bbox: BboxVO) -> float:
         """
         Calcula o score baseado na nitidez da face usando variação Laplaciana.
+        OTIMIZAÇÃO: Usa ndarray_readonly para evitar cópia.
 
         :param frame: Frame onde a face foi detectada.
         :param bbox: Bounding box da face.
         :return: Score de nitidez (0.0 a 1.0).
         """
         x1, y1, x2, y2 = bbox.value()
-        frame_ndarray = frame.ndarray
+        # OTIMIZAÇÃO: Usa ndarray_readonly - não precisa de cópia para leitura
+        frame_ndarray = frame.ndarray_readonly
         
-        face_roi = frame_ndarray[y1:y2, x1:x2]
+        face_roi = frame_ndarray[y1:y2, x1:x2].copy()  # Copia apenas o ROI pequeno
         
         if face_roi.size == 0:
             return 0.0

@@ -64,7 +64,7 @@ class StorageConfig:
 class MovementConfig:
     """Configuração de detecção de movimento."""
     min_movement_threshold_pixels: float = 50.0
-    min_movement_frame_percentage: float = 0.3
+    min_movement_frame_percentage: float = 0.1
 
 
 @dataclass

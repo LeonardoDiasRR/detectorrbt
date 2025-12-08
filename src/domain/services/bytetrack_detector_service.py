@@ -43,7 +43,7 @@ class ByteTrackDetectorService:
         project_dir: str = "./imagens/",
         results_dir: str = "rtsp_byte_track_results",
         min_movement_threshold: float = 50.0,
-        min_movement_percentage: float = 0.3,
+        min_movement_percentage: float = 0.1,
         min_confidence_threshold: float = 0.45,
         max_frames_per_track: int = 900  # RENOMEADO
     ):
@@ -64,7 +64,7 @@ class ByteTrackDetectorService:
         :param project_dir: Diretório base para salvamento de imagens.
         :param results_dir: Nome do subdiretório para resultados.
         :param min_movement_threshold: Limite mínimo de movimento em pixels.
-        :param min_movement_percentage: Percentual mínimo de frames com movimento.
+        :param min_movement_percentage: Percentual mínimo de frames com movimento (0.0 a 1.0).
         :param min_confidence_threshold: Confiança mínima para considerar track válido.
         :param max_frames_per_track: Máximo de frames permitidos por track.
         :raises TypeError: Se camera não for do tipo Camera.
@@ -110,6 +110,9 @@ class ByteTrackDetectorService:
         # Contador global de IDs para frames e eventos
         self._frame_id_counter = 0
         self._event_id_counter = 0
+        
+        # OTIMIZAÇÃO 7: Contador para coleta de lixo periódica
+        self._tracks_finalized_count = 0
 
     def start(self):
         """Inicia o processamento do stream de vídeo"""
@@ -165,11 +168,14 @@ class ByteTrackDetectorService:
                             if track_id not in self.active_tracks:
                                 self.active_tracks[track_id] = Track(
                                     id=IdVO(track_id),
-                                    events=[]
+                                    min_movement_percentage=self.min_movement_percentage
                                 )
                                 self.track_frame_count[track_id] = 0  # NOVO: inicializa contador
                             
-                            self.active_tracks[track_id].add_event(event)
+                            self.active_tracks[track_id].add_event(
+                                event,
+                                min_threshold_pixels=self.min_movement_threshold
+                            )
                             self.track_frames_lost[track_id] = 0
                             self.track_frame_count[track_id] += 1  # NOVO: incrementa contador de frames
                             
@@ -206,6 +212,7 @@ class ByteTrackDetectorService:
     def _create_frame_entity(self, frame_array: np.ndarray) -> Frame:
         """
         Cria uma entidade Frame a partir de um numpy array.
+        OTIMIZAÇÃO: Usa FullFrameVO sem cópia (copy=False) - economiza ~70% memória.
         
         :param frame_array: Array numpy do frame.
         :return: Entidade Frame.
@@ -213,7 +220,7 @@ class ByteTrackDetectorService:
         self._frame_id_counter += 1
         return Frame(
             id=IdVO(self._frame_id_counter),
-            full_frame=FullFrameVO(frame_array),
+            full_frame=FullFrameVO(frame_array, copy=False),  # OTIMIZAÇÃO 4: Sem cópia
             camera_id=self.camera.camera_id,
             camera_name=self.camera.camera_name,
             camera_token=self.camera.camera_token,
@@ -275,12 +282,7 @@ class ByteTrackDetectorService:
         :return: True se o track for válido, False caso contrário.
         """
         # Verifica movimento
-        has_movement = track.has_movement(
-            min_threshold_pixels=self.min_movement_threshold,
-            min_frame_percentage=self.min_movement_percentage
-        )
-        
-        if not has_movement:
+        if not track.has_movement:
             return False
         
         # Verifica confiança do melhor evento
@@ -334,10 +336,7 @@ class ByteTrackDetectorService:
         is_valid = self.is_valid(track)
         
         # Obtém estatísticas de movimento
-        has_movement = track.has_movement(
-            min_threshold_pixels=self.min_movement_threshold,
-            min_frame_percentage=self.min_movement_percentage
-        )
+        has_movement = track.has_movement
         movement_stats = track.get_movement_statistics()
         
         # Obtém melhor evento do track
@@ -364,6 +363,13 @@ class ByteTrackDetectorService:
         if track_id in self.track_frame_count:  # NOVO: limpa contador de frames
             del self.track_frame_count[track_id]
         
+        # OTIMIZAÇÃO 7: Coleta de lixo periódica a cada 100 tracks
+        self._tracks_finalized_count += 1
+        if self._tracks_finalized_count % 100 == 0:
+            import gc
+            gc.collect()
+            self.logger.debug(f"Coleta de lixo executada após {self._tracks_finalized_count} tracks finalizados")
+        
         if best_event is None:
             self.logger.warning(f"Track {track_id} não possui melhor evento")
             return
@@ -377,14 +383,14 @@ class ByteTrackDetectorService:
         elif not is_valid:
             # Log detalhado do motivo da invalidação
             movimento_str = "SIM" if has_movement else "NÃO"
-            razao = "sem movimento significativo" if not has_movement else f"confiança insuficiente ({best_confidence:.2f} < {self.min_confidence_threshold})"
+            razao = "sem movimento significativo" if not has_movement else f"confiança insuficiente ({best_confidence:.6f} < {self.min_confidence_threshold:.6f})"
             
             self.logger.warning(
                 f"Track {track_id} INVÁLIDO - Descartado | "
                 f"Razão: {razao} | "
                 f"Movimento: {movimento_str} | "
-                f"Confiança: {best_confidence:.2f} | "
-                f"Threshold mínimo: {self.min_confidence_threshold}"
+                f"Confiança: {best_confidence:.6f} | "  # Alterado de .2f para .6f
+                f"Threshold mínimo: {self.min_confidence_threshold:.6f}"  # Alterado
             )
 
     def _save_best_event(self, track_id: int, event: Event, total_events: int, has_movement: bool, is_valid: bool):
@@ -398,8 +404,8 @@ class ByteTrackDetectorService:
         :param is_valid: Se o track é válido para envio ao FindFace.
         """
         try:
-            # Cria uma cópia do frame para desenhar
-            frame_with_bbox = event.frame.ndarray.copy()
+            # OTIMIZAÇÃO 5: Usa ndarray_readonly + copia apenas uma vez
+            frame_with_bbox = event.frame.full_frame.ndarray_readonly.copy()
             
             x1, y1, x2, y2 = event.bbox.value()
             

@@ -70,8 +70,21 @@ class Frame:
 
     @property
     def ndarray(self) -> np.ndarray:
-        """Retorna o array numpy do frame (cópia)."""
-        return self._full_frame.value()
+        """
+        Retorna o array numpy do frame (cópia).
+        Para operações read-only, use ndarray_readonly para evitar cópia.
+        """
+        return self._full_frame.value(copy=True)
+    
+    @property
+    def ndarray_readonly(self) -> np.ndarray:
+        """
+        Retorna referência read-only ao array numpy do frame - ZERO cópias.
+        OTIMIZAÇÃO: Use este método para operações de leitura.
+        
+        :return: Referência read-only ao ndarray.
+        """
+        return self._full_frame.ndarray_readonly
 
     @property
     def camera_id(self) -> IdVO:
@@ -96,6 +109,7 @@ class Frame:
     def jpg(self, quality: int = 95) -> bytes:
         """
         Converte o frame para formato JPEG e retorna como bytes.
+        OTIMIZAÇÃO: Usa ndarray_readonly para evitar cópia desnecessária.
 
         :param quality: Qualidade de compressão JPEG (0-100), padrão 95.
         :return: Frame codificado em JPEG como bytes.
@@ -105,7 +119,8 @@ class Frame:
         if not 0 <= quality <= 100:
             raise ValueError(f"Qualidade deve estar entre 0 e 100, recebido: {quality}")
         
-        success, buffer = cv2.imencode('.jpg', self.ndarray, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        # OTIMIZAÇÃO: Usa ndarray_readonly - cv2.imencode não modifica a imagem
+        success, buffer = cv2.imencode('.jpg', self.ndarray_readonly, [cv2.IMWRITE_JPEG_QUALITY, quality])
         
         if not success:
             raise RuntimeError("Falha ao codificar o frame em JPEG")

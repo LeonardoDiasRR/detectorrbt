@@ -111,7 +111,8 @@ class FindfaceAdapter:
             expand_h = height * 0.20
             
             # Aplica expansão mantendo dentro dos limites do frame
-            frame_height, frame_width = event.frame.ndarray.shape[:2]
+            # OTIMIZAÇÃO: Usa propriedades do FullFrameVO - evita acesso desnecessário
+            frame_height, frame_width = event.frame.height, event.frame.width
             x1_expanded = max(0, x1 - expand_w)
             y1_expanded = max(0, y1 - expand_h)
             x2_expanded = min(frame_width, x2 + expand_w)
