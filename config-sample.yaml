@@ -4,7 +4,7 @@ gpu_index: 0
 
 # Tamanho do lote de processamento de detecções para CPU e GPU
 cpu_batch_size: 4
-gpu_batch_size: 32
+gpu_batch_size: 16
 
 # Limite de frames sem detecção para considerar o objeto perdido
 max_frames_lost: 30
@@ -70,13 +70,13 @@ performance:
   # Resolução de inferência (640, 1280). Menor = mais rápido
   inference_size: 640
   # Processa detecções a cada N frames (1 = todos os frames)
-  detection_skip_frames: 1
+  detection_skip_frames: 2
   # Máximo de workers para processamento paralelo (0 = automático)
   max_parallel_workers: 0
   # Ativa processamento assíncrono de frames
   async_inference: true
   # Tamanho da fila de frames para processamento assíncrono
-  async_queue_size: 32  # ajuste para o tamanho lote de processamento de frames (batch size)
+  async_queue_size: 16  # ajuste para o tamanho lote de processamento de frames (batch size)
   # Ativa batch processing de qualidade facial
   batch_quality_calculation: true
 
