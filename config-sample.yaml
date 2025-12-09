@@ -65,6 +65,21 @@ validacao:
 # Prefixo dos grupos de câmeras no FindFace
 prefixo_grupo_camera_findface: "TESTE"
 
+# Otimizações de performance para cenas com muitas faces
+performance:
+  # Resolução de inferência (640, 1280). Menor = mais rápido
+  inference_size: 640
+  # Processa detecções a cada N frames (1 = todos os frames)
+  detection_skip_frames: 1
+  # Máximo de workers para processamento paralelo (0 = automático)
+  max_parallel_workers: 0
+  # Ativa processamento assíncrono de frames
+  async_inference: true
+  # Tamanho da fila de frames para processamento assíncrono
+  async_queue_size: 32  # ajuste para o tamanho lote de processamento de frames (batch size)
+  # Ativa batch processing de qualidade facial
+  batch_quality_calculation: true
+
 # Configurações TensorRT (melhor performance em GPUs NVIDIA)
 tensorrt:
   # Habilita o uso de TensorRT se disponível (requer CUDA)

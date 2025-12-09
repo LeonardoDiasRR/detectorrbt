@@ -103,7 +103,8 @@ class TensorRTModelAdapter(IDetectionModel):
         show: bool = False,
         stream: bool = True,
         batch: int = 32,
-        verbose: bool = False
+        verbose: bool = False,
+        imgsz: int = 640
     ) -> Iterator[Any]:
         """
         Realiza tracking usando modelo TensorRT otimizado.
@@ -120,7 +121,8 @@ class TensorRTModelAdapter(IDetectionModel):
             show=show,
             stream=stream,
             batch=batch,
-            verbose=verbose
+            verbose=verbose,
+            imgsz=imgsz
         )
     
     def get_model_info(self) -> dict:

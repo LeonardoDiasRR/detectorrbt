@@ -49,7 +49,8 @@ class YOLOModelAdapter(IDetectionModel):
         show: bool = False,
         stream: bool = True,
         batch: int = 4,
-        verbose: bool = False
+        verbose: bool = False,
+        imgsz: int = 640
     ) -> Iterator[Any]:
         """
         Realiza tracking usando YOLO padrão.
@@ -64,7 +65,8 @@ class YOLOModelAdapter(IDetectionModel):
             stream=stream,
             batch=batch,
             verbose=verbose,
-            half=self.use_fp16
+            half=self.use_fp16,
+            imgsz=imgsz
         )
     
     def get_model_info(self) -> dict:

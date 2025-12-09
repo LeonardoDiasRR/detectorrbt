@@ -106,7 +106,8 @@ class OpenVINOModelAdapter(IDetectionModel):
         show: bool = False,
         stream: bool = True,
         batch: int = 4,
-        verbose: bool = False
+        verbose: bool = False,
+        imgsz: int = 640
     ) -> Iterator[Any]:
         """
         Realiza tracking usando modelo OpenVINO otimizado.
@@ -134,7 +135,8 @@ class OpenVINOModelAdapter(IDetectionModel):
             show=False,
             stream=stream,
             batch=batch,
-            verbose=False
+            verbose=False,
+            imgsz=imgsz
         )
     
     def get_model_info(self) -> dict:

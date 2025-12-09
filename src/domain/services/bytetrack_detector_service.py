@@ -45,7 +45,9 @@ class ByteTrackDetectorService:
         min_movement_threshold: float = 50.0,
         min_movement_percentage: float = 0.1,
         min_confidence_threshold: float = 0.45,
-        max_frames_per_track: int = 900  # RENOMEADO
+        max_frames_per_track: int = 900,  # RENOMEADO
+        inference_size: int = 640,  # NOVO: Tamanho da imagem para inferência
+        detection_skip_frames: int = 1  # NOVO: Detectar a cada N frames (tracking continua em todos)
     ):
         """
         Inicializa o serviço de detecção de faces.
@@ -67,6 +69,8 @@ class ByteTrackDetectorService:
         :param min_movement_percentage: Percentual mínimo de frames com movimento (0.0 a 1.0).
         :param min_confidence_threshold: Confiança mínima para considerar track válido.
         :param max_frames_per_track: Máximo de frames permitidos por track.
+        :param inference_size: Tamanho da imagem para inferência (ex: 640, 1280).
+        :param detection_skip_frames: Realiza detecção a cada N frames (tracking continua em todos os frames).
         :raises TypeError: Se camera não for do tipo Camera.
         """
         if not isinstance(camera, Camera):
@@ -96,6 +100,8 @@ class ByteTrackDetectorService:
         self.min_movement_percentage = min_movement_percentage
         self.min_confidence_threshold = min_confidence_threshold
         self.max_frames_per_track = max_frames_per_track  # RENOMEADO
+        self.inference_size = inference_size  # NOVO
+        self.detection_skip_frames = max(1, detection_skip_frames)  # NOVO: mínimo 1
         self.running = False
         
         self.logger = logging.getLogger(
@@ -113,6 +119,9 @@ class ByteTrackDetectorService:
         
         # OTIMIZAÇÃO 7: Contador para coleta de lixo periódica
         self._tracks_finalized_count = 0
+        
+        # OTIMIZAÇÃO 3: Contador de frames para skip frames
+        self._frame_counter = 0
 
     def start(self):
         """Inicia o processamento do stream de vídeo"""
@@ -144,17 +153,24 @@ class ByteTrackDetectorService:
                     show=self.show,
                     stream=self.stream,
                     batch=self.batch,
-                    verbose=False
+                    verbose=False,
+                    imgsz=self.inference_size
                 ):
                     if not self.running:
                         break
+                    
+                    # Incrementa contador de frames
+                    self._frame_counter += 1
+                    
+                    # OTIMIZAÇÃO 3: Detectar apenas a cada N frames (tracking continua)
+                    should_detect = (self._frame_counter % self.detection_skip_frames) == 0
                     
                     # Cria entidade Frame
                     frame_entity = self._create_frame_entity(result.orig_img)
                     current_frame_tracks = set()
                     
-                    # Processa detecções do frame atual
-                    if result.boxes is not None and result.boxes.id is not None:
+                    # Processa detecções do frame atual (se for o frame de detecção)
+                    if should_detect and result.boxes is not None and result.boxes.id is not None:
                         for i, box in enumerate(result.boxes):
                             track_id = int(box.id[0])
                             current_frame_tracks.add(track_id)

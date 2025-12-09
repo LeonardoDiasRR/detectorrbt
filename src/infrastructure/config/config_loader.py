@@ -21,7 +21,8 @@ from .settings import (
     ValidationConfig,
     MovementConfig,
     TensorRTConfig,
-    OpenVINOConfig
+    OpenVINOConfig,
+    PerformanceConfig
 )
 
 
@@ -133,6 +134,16 @@ class ConfigLoader:
             precision=yaml_config.get("openvino", {}).get("precision", "FP16")
         )
         
+        # Configuração de Performance
+        performance_config = PerformanceConfig(
+            inference_size=yaml_config.get("performance", {}).get("inference_size", 640),
+            detection_skip_frames=yaml_config.get("performance", {}).get("detection_skip_frames", 1),
+            max_parallel_workers=yaml_config.get("performance", {}).get("max_parallel_workers", 0),
+            async_inference=yaml_config.get("performance", {}).get("async_inference", False),
+            async_queue_size=yaml_config.get("performance", {}).get("async_queue_size", 10),
+            batch_quality_calculation=yaml_config.get("performance", {}).get("batch_quality_calculation", True)
+        )
+        
         # Carrega câmeras do YAML
         cameras = [
             CameraConfig(
@@ -154,5 +165,6 @@ class ConfigLoader:
             validation=validation_config,
             tensorrt=tensorrt_config,
             openvino=openvino_config,
+            performance=performance_config,
             cameras=cameras
         )

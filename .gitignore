@@ -177,3 +177,6 @@ config.yaml
 teste-findface.py
 yolov12n-face_openvino_model/
 config.yaml
+test_face_quality.py
+test_face_quality2.py
+test_face_quality3.py
