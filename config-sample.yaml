@@ -23,7 +23,7 @@ tracker: "bytetrack.yaml"
 
 # Confiança mínima para considerar uma detecção válida
 conf: 0.1  # Valor padrão: 0.1 igual o do algoritmo ByteTrack
-iou: 0.2 # Mais permissivo, mantêm o track por mais tempo
+iou: 0.05 # Mais permissivo, mantêm o track por mais tempo
 
 # Exibir na tela
 show: false
@@ -51,7 +51,7 @@ salvamento_imagens:
 movimento:
   # Limiar mínimo de variação em pixels para considerar movimento
   # Calcula-se a distância euclidiana entre centros dos bboxes consecutivos
-  limiar_minimo_pixels: 0.7  # 1 pixel
+  limiar_minimo_pixels: 1  # 1 pixel
   # Percentual mínimo de frames com movimento (0.0 a 1.0)
   # Se menos que esse percentual tiver movimento, considera sem movimento
   percentual_minimo_frames: 0.1  # 10% dos frames
