@@ -87,6 +87,7 @@ class PerformanceConfig:
     async_inference: bool = False
     async_queue_size: int = 10
     batch_quality_calculation: bool = True
+    findface_queue_size: int = 200  # Tamanho da fila assíncrona FindFace
 
 
 @dataclass

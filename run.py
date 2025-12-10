@@ -229,7 +229,8 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
                 min_confidence_threshold=settings.validation.min_confidence,
                 max_frames_per_track=settings.bytetrack.max_frames_per_track,
                 inference_size=settings.performance.inference_size,
-                detection_skip_frames=settings.performance.detection_skip_frames
+                detection_skip_frames=settings.performance.detection_skip_frames,
+                findface_queue_size=settings.performance.findface_queue_size
             )
             processors.append(processor)
             

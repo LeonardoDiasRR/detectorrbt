@@ -80,6 +80,8 @@ performance:
   async_queue_size: 16  # ajuste para o tamanho lote de processamento de frames (batch size)
   # Ativa batch processing de qualidade facial
   batch_quality_calculation: true
+  # Tamanho da fila assíncrona para envios FindFace (200 = padrão, 0 = desabilita fila)
+  findface_queue_size: 200
 
 # Configurações TensorRT (melhor performance em GPUs NVIDIA)
 tensorrt:

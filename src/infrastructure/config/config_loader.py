@@ -150,7 +150,8 @@ class ConfigLoader:
             max_parallel_workers=yaml_config.get("performance", {}).get("max_parallel_workers", 0),
             async_inference=yaml_config.get("performance", {}).get("async_inference", False),
             async_queue_size=yaml_config.get("performance", {}).get("async_queue_size", 10),
-            batch_quality_calculation=yaml_config.get("performance", {}).get("batch_quality_calculation", True)
+            batch_quality_calculation=yaml_config.get("performance", {}).get("batch_quality_calculation", True),
+            findface_queue_size=yaml_config.get("performance", {}).get("findface_queue_size", 200)
         )
         
         # Carrega câmeras do YAML

@@ -8,6 +8,8 @@ from collections import defaultdict
 from datetime import datetime
 import logging
 import time
+from queue import Queue
+from threading import Thread
 
 # 3rd party
 import numpy as np
@@ -47,7 +49,8 @@ class ByteTrackDetectorService:
         min_confidence_threshold: float = 0.45,
         max_frames_per_track: int = 900,  # RENOMEADO
         inference_size: int = 640,  # NOVO: Tamanho da imagem para inferência
-        detection_skip_frames: int = 1  # NOVO: Detectar a cada N frames (tracking continua em todos)
+        detection_skip_frames: int = 1,  # NOVO: Detectar a cada N frames (tracking continua em todos)
+        findface_queue_size: int = 200  # NOVO: Tamanho da fila assíncrona FindFace
     ):
         """
         Inicializa o serviço de detecção de faces.
@@ -71,6 +74,7 @@ class ByteTrackDetectorService:
         :param max_frames_per_track: Máximo de frames permitidos por track.
         :param inference_size: Tamanho da imagem para inferência (ex: 640, 1280).
         :param detection_skip_frames: Realiza detecção a cada N frames (tracking continua em todos os frames).
+        :param findface_queue_size: Tamanho da fila assíncrona para envios FindFace (0 = desabilita fila).
         :raises TypeError: Se camera não for do tipo Camera.
         """
         if not isinstance(camera, Camera):
@@ -102,6 +106,7 @@ class ByteTrackDetectorService:
         self.max_frames_per_track = max_frames_per_track  # RENOMEADO
         self.inference_size = inference_size  # NOVO
         self.detection_skip_frames = max(1, detection_skip_frames)  # NOVO: mínimo 1
+        self.findface_queue_size = findface_queue_size  # NOVO: tamanho da fila FindFace
         self.running = False
         
         self.logger = logging.getLogger(
@@ -122,7 +127,87 @@ class ByteTrackDetectorService:
         
         # OTIMIZAÇÃO 3: Contador de frames para skip frames
         self._frame_counter = 0
+        
+        # OTIMIZAÇÃO 8: Fila assíncrona para envios FindFace
+        self._findface_queue: Optional[Queue] = None
+        self._findface_worker: Optional[Thread] = None
+        if self.findface_adapter is not None and self.findface_queue_size > 0:
+            self._findface_queue = Queue(maxsize=self.findface_queue_size)
+            self._findface_worker = Thread(
+                target=self._findface_sender_worker,
+                name=f"FindFace-Worker-{camera.camera_id.value()}",
+                daemon=True
+            )
+            self._findface_worker.start()
+            self.logger.info(f"Worker assíncrono FindFace iniciado (fila: {self.findface_queue_size})")
+        elif self.findface_adapter is not None and self.findface_queue_size == 0:
+            self.logger.info("Fila FindFace desabilitada (findface_queue_size=0) - modo síncrono")
 
+    def _findface_sender_worker(self):
+        """Worker thread dedicado para envios FindFace.
+        
+        Processa eventos da fila de forma assíncrona, evitando bloquear
+        a thread principal de detecção/tracking.
+        """
+        self.logger.info("FindFace worker iniciado")
+        while self.running:
+            try:
+                # Aguarda evento com timeout curto para responder rapidamente a self.running
+                event_data = self._findface_queue.get(timeout=0.5)
+                
+                if event_data is None:  # Sinal de parada
+                    self.logger.info("FindFace worker recebeu sinal de parada")
+                    break
+                
+                # Verifica novamente se ainda está rodando
+                if not self.running:
+                    self.logger.info("FindFace worker interrompido (self.running=False)")
+                    break
+                
+                track_id, event, total_events = event_data
+                
+                try:
+                    # Envia para FindFace (operação bloqueante isolada)
+                    resposta = self.findface_adapter.send_event(event)
+                    
+                    # Verifica sucesso
+                    if resposta:
+                        self.logger.info(
+                            f"✓ FindFace - Envio BEM-SUCEDIDO - Track {track_id}: "
+                            f"quality={event.face_quality_score.value():.4f}, "
+                            f"total_events={total_events}, "
+                            f"camera_id={event.camera_id.value()}, "
+                            f"resposta={resposta}"
+                        )
+                    else:
+                        self.logger.warning(
+                            f"✗ FindFace - Envio retornou resposta vazia - Track {track_id}: "
+                            f"quality={event.face_quality_score.value():.4f}, "
+                            f"total_events={total_events}, "
+                            f"camera_id={event.camera_id.value()}"
+                        )
+                        
+                except Exception as e:
+                    self.logger.error(
+                        f"✗ FindFace - FALHA no envio - Track {track_id}: "
+                        f"quality={event.face_quality_score.value():.4f}, "
+                        f"total_events={total_events}, "
+                        f"camera_id={event.camera_id.value()}, "
+                        f"erro={e}",
+                        exc_info=True
+                    )
+                finally:
+                    self._findface_queue.task_done()
+                    
+            except Exception as e:
+                # Timeout ou erro no get() - continua loop se ainda running
+                if not self.running:
+                    break
+                # Ignora timeout (Queue.Empty)
+                continue
+        
+        self.logger.info("FindFace worker finalizado")
+    
     def start(self):
         """Inicia o processamento do stream de vídeo"""
         self.running = True
@@ -135,6 +220,26 @@ class ByteTrackDetectorService:
     def stop(self):
         """Para o processamento do stream"""
         self.running = False
+        
+        # Finaliza worker FindFace graciosamente
+        if self._findface_queue is not None and self._findface_worker is not None:
+            try:
+                # Envia sinal de parada (prioritário - não aguarda fila esvaziar)
+                try:
+                    self._findface_queue.put(None, timeout=0.5)
+                except:
+                    self.logger.warning("Não foi possível enviar sinal de parada para worker FindFace")
+                
+                # Aguarda worker finalizar (timeout curto)
+                self._findface_worker.join(timeout=2.0)
+                
+                if self._findface_worker.is_alive():
+                    self.logger.warning("FindFace worker não finalizou no tempo esperado")
+                else:
+                    self.logger.info("FindFace worker finalizado com sucesso")
+            except Exception as e:
+                self.logger.error(f"Erro ao finalizar FindFace worker: {e}")
+        
         self.logger.info(
             f"ByteTrackDetectorService finalizado para câmera "
             f"{self.camera.camera_name.value()}"
@@ -506,7 +611,8 @@ class ByteTrackDetectorService:
 
     def _send_best_event_to_findface(self, track_id: int, event: Event, total_events: int):
         """
-        Envia o melhor evento do track para o FindFace usando o adapter.
+        Enfileira o melhor evento do track para envio assíncrono ao FindFace.
+        OTIMIZAÇÃO 8: Usa fila assíncrona para não bloquear thread de detecção.
         
         :param track_id: ID do track.
         :param event: Melhor evento do track.
@@ -515,36 +621,28 @@ class ByteTrackDetectorService:
         if self.findface_adapter is None:
             self.logger.warning(f"FindFace adapter não configurado. Track {track_id} não será enviado.")
             return
-            
+        
+        if self._findface_queue is None:
+            self.logger.error(f"Fila FindFace não inicializada. Track {track_id} não será enviado.")
+            return
+        
         try:
-            # Envia para FindFace usando o adapter
-            resposta = self.findface_adapter.send_event(event)
+            # Enfileira evento para processamento assíncrono (non-blocking)
+            self._findface_queue.put_nowait((track_id, event, total_events))
             
-            # Verifica sucesso
-            if resposta:
-                self.logger.info(
-                    f"✓ FindFace - Envio BEM-SUCEDIDO - Track {track_id}: "
-                    f"quality={event.face_quality_score.value():.4f}, "
-                    f"total_events={total_events}, "
-                    f"camera_id={event.camera_id.value()}, "
-                    f"resposta={resposta}"
-                )
-            else:
-                self.logger.warning(
-                    f"✗ FindFace - Envio retornou resposta vazia - Track {track_id}: "
-                    f"quality={event.face_quality_score.value():.4f}, "
-                    f"total_events={total_events}, "
-                    f"camera_id={event.camera_id.value()}"
-                )
-                
+            self.logger.debug(
+                f"Track {track_id} enfileirado para envio FindFace "
+                f"(fila: {self._findface_queue.qsize()}/{self._findface_queue.maxsize})"
+            )
+            
         except Exception as e:
-            self.logger.error(
-                f"✗ FindFace - FALHA no envio - Track {track_id}: "
+            # Fila cheia - descarta evento e loga warning
+            self.logger.warning(
+                f"⚠ FindFace - Fila CHEIA - Track {track_id} DESCARTADO: "
                 f"quality={event.face_quality_score.value():.4f}, "
                 f"total_events={total_events}, "
-                f"camera_id={event.camera_id.value()}, "
-                f"erro={e}",
-                exc_info=True
+                f"fila_size={self._findface_queue.qsize()}, "
+                f"erro={e}"
             )
 
     def _finalize_all_tracks(self):
