@@ -84,8 +84,6 @@ class PerformanceConfig:
     inference_size: int = 640
     detection_skip_frames: int = 1
     max_parallel_workers: int = 0
-    async_inference: bool = False
-    async_queue_size: int = 10
     batch_quality_calculation: bool = True
     findface_queue_size: int = 200  # Tamanho da fila assíncrona FindFace
 

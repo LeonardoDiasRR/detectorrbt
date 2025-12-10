@@ -148,12 +148,11 @@ performance:
   # Processamento paralelo de faces detectadas
   max_parallel_workers: 10
   
-  # Inferência assíncrona (desacopla captura de inferência)
-  async_inference: false  # Desabilitar em multi-GPU (não necessário)
-  async_queue_size: 16
-  
   # Cálculo vetorizado de qualidade facial
   batch_quality_calculation: true
+  
+  # Fila assíncrona para envio ao FindFace
+  findface_queue_size: 200
 
 tensorrt:
   enabled: true

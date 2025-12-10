@@ -44,6 +44,7 @@ class FaceQualityService:
     def _calculate_frontal_score(landmarks: LandmarksVO) -> float:
         """
         Calcula o score baseado na frontalidade da face usando landmarks.
+        Utiliza simetria completa dos landmarks (olhos e boca) para maior precisão.
 
         :param landmarks: Landmarks faciais.
         :return: Score de frontalidade (0.0 a 1.0).
@@ -53,23 +54,30 @@ class FaceQualityService:
         if landmarks_array is None or len(landmarks_array) < 5:
             return 1.0
         
-        # Calcula simetria dos olhos
-        left_eye = landmarks_array[0]
-        right_eye = landmarks_array[1]
-        nose = landmarks_array[2]
+        # Desempacota os pontos: olho esq., olho dir., nariz, boca esq., boca dir.
+        le, re, n, lm, rm = landmarks_array
 
-        # Distância horizontal dos olhos
-        eye_distance = abs(right_eye[0] - left_eye[0])
+        # Calcula as distâncias entre o nariz e os demais pontos
+        import math
+        dist_n_le = math.dist(n, le)
+        dist_n_re = math.dist(n, re)
+        dist_n_lm = math.dist(n, lm)
+        dist_n_rm = math.dist(n, rm)
 
-        # Distância do nariz ao centro dos olhos
-        eye_center_x = (left_eye[0] + right_eye[0]) / 2
-        nose_offset = abs(nose[0] - eye_center_x)
+        # Distância média usada para normalização
+        avg_dist = (dist_n_le + dist_n_re + dist_n_lm + dist_n_rm) / 4.0
 
-        # Score frontal: quanto menor o offset do nariz, mais frontal
-        if eye_distance > 0:
-            return max(0.0, 1.0 - (nose_offset / eye_distance))
-        
-        return 1.0
+        # Diferença de simetria entre olhos e entre cantos da boca
+        symmetry_diff = abs(dist_n_le - dist_n_re) + abs(dist_n_lm - dist_n_rm)
+
+        # Evita divisão por zero
+        epsilon = 1e-6
+
+        # Score de frontalidade (quanto mais simétrico, mais próximo de 1.0)
+        score = 1.0 - (symmetry_diff / (2.0 * avg_dist + epsilon))
+
+        # Garante que o score esteja dentro do intervalo [0.0, 1.0]
+        return max(0.0, min(1.0, score))
 
     @staticmethod
     def _calculate_proportion_score(bbox: BboxVO) -> float:
@@ -162,3 +170,4 @@ class FaceQualityService:
         ) / total_peso
 
         return ConfidenceVO(score_final)
+        

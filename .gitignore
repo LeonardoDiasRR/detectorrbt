@@ -181,3 +181,4 @@ test_face_quality.py
 test_face_quality2.py
 test_face_quality3.py
 *.log.*
+test_face_quality4.py
