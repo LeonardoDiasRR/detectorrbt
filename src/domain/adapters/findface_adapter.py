@@ -59,7 +59,8 @@ class FindfaceAdapter:
                 cameras_response = self.findface.get_cameras(
                     camera_groups=[grupo["id"]],
                     external_detector=True,
-                    ordering='id'
+                    ordering='id',
+                    active=True
                 )["results"]
                 
                 # Filtra câmeras com RTSP no comment
