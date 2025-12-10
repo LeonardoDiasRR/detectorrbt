@@ -108,6 +108,7 @@ class ByteTrackDetectorService:
         self.detection_skip_frames = max(1, detection_skip_frames)  # NOVO: mínimo 1
         self.findface_queue_size = findface_queue_size  # NOVO: tamanho da fila FindFace
         self.running = False
+        self._findface_worker_running = False  # NOVO: controle separado para worker FindFace
         
         self.logger = logging.getLogger(
             f"ByteTrackDetectorService_{camera.camera_id.value()}_{camera.camera_name.value()}"
@@ -133,6 +134,7 @@ class ByteTrackDetectorService:
         self._findface_worker: Optional[Thread] = None
         if self.findface_adapter is not None and self.findface_queue_size > 0:
             self._findface_queue = Queue(maxsize=self.findface_queue_size)
+            self._findface_worker_running = True  # Ativa worker ANTES de iniciar thread
             self._findface_worker = Thread(
                 target=self._findface_sender_worker,
                 name=f"FindFace-Worker-{camera.camera_id.value()}",
@@ -150,9 +152,9 @@ class ByteTrackDetectorService:
         a thread principal de detecção/tracking.
         """
         self.logger.info("FindFace worker iniciado")
-        while self.running:
+        while self._findface_worker_running:
             try:
-                # Aguarda evento com timeout curto para responder rapidamente a self.running
+                # Aguarda evento com timeout curto para responder rapidamente a _findface_worker_running
                 event_data = self._findface_queue.get(timeout=0.5)
                 
                 if event_data is None:  # Sinal de parada
@@ -160,8 +162,8 @@ class ByteTrackDetectorService:
                     break
                 
                 # Verifica novamente se ainda está rodando
-                if not self.running:
-                    self.logger.info("FindFace worker interrompido (self.running=False)")
+                if not self._findface_worker_running:
+                    self.logger.info("FindFace worker interrompido (_findface_worker_running=False)")
                     break
                 
                 track_id, event, total_events = event_data
@@ -201,7 +203,7 @@ class ByteTrackDetectorService:
                     
             except Exception as e:
                 # Timeout ou erro no get() - continua loop se ainda running
-                if not self.running:
+                if not self._findface_worker_running:
                     break
                 # Ignora timeout (Queue.Empty)
                 continue
@@ -224,6 +226,9 @@ class ByteTrackDetectorService:
         # Finaliza worker FindFace graciosamente
         if self._findface_queue is not None and self._findface_worker is not None:
             try:
+                # Para o worker
+                self._findface_worker_running = False
+                
                 # Envia sinal de parada (prioritário - não aguarda fila esvaziar)
                 try:
                     self._findface_queue.put(None, timeout=0.5)
