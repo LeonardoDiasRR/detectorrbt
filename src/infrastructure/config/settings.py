@@ -45,9 +45,14 @@ class FindFaceConfig:
 @dataclass
 class ProcessingConfig:
     """Configuração de processamento."""
-    gpu_index: int = 0
+    gpu_devices: List[int] = None
     gpu_batch_size: int = 32
     cpu_batch_size: int = 4
+    
+    def __post_init__(self):
+        """Inicializa valores padrão após criação."""
+        if self.gpu_devices is None:
+            self.gpu_devices = [0]
     show_video: bool = True
     verbose_log: bool = False
 

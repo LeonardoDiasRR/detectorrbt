@@ -97,8 +97,17 @@ class ConfigLoader:
             max_frames_per_track=yaml_config.get("max_frames_por_track", 900)
         )
         
+        # Carrega gpu_devices do YAML (pode ser lista ou int único)
+        gpu_devices_value = yaml_config.get("gpu_devices", yaml_config.get("gpu_index", 0))
+        if isinstance(gpu_devices_value, int):
+            gpu_devices = [gpu_devices_value]
+        elif isinstance(gpu_devices_value, list):
+            gpu_devices = gpu_devices_value
+        else:
+            gpu_devices = [0]  # Fallback para GPU 0
+        
         processing_config = ProcessingConfig(
-            gpu_index=yaml_config.get("gpu_index", 0),
+            gpu_devices=gpu_devices,
             gpu_batch_size=yaml_config.get("gpu_batch_size", 32),
             cpu_batch_size=yaml_config.get("cpu_batch_size", 4),
             show_video=yaml_config.get("show", True),

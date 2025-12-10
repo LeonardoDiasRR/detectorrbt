@@ -170,12 +170,27 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     
     logger.info(f"Total de {len(cameras_ff)} câmera(s) para processar.")
     
+    # Obtém lista de GPUs a usar (distribuição round-robin)
+    gpu_devices = settings.processing.gpu_devices
+    num_gpus = len(gpu_devices)
+    logger.info(f"Distribuindo {len(cameras_ff)} câmera(s) entre {num_gpus} GPU(s): {gpu_devices}")
+    
     # Cria serviços de detecção - CADA CÂMERA COM SEU PRÓPRIO MODELO
     for i, camera in enumerate(cameras_ff, 1):
         try:
+            # Determina GPU para esta câmera (round-robin)
+            gpu_id = gpu_devices[(i - 1) % num_gpus]
+            logger.info(f"[{i}/{len(cameras_ff)}] Câmera {camera.camera_name.value()} → GPU {gpu_id}")
+            
             # IMPORTANTE: Cria uma instância SEPARADA do modelo para cada câmera
             # Isso evita conflitos de thread-safety
             logger.info(f"[{i}/{len(cameras_ff)}] Carregando modelo para câmera {camera.camera_name.value()}...")
+            
+            # Configura GPU antes de criar o modelo
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.set_device(gpu_id)
+                logger.info(f"[{i}/{len(cameras_ff)}] GPU {gpu_id} selecionada para câmera {camera.camera_name.value()}")
             
             detection_model = ModelFactory.create_model(
                 model_path=settings.yolo.model_path,

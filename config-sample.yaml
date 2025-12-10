@@ -1,6 +1,7 @@
 # config.yaml
-# Índice da GPU a ser utilizada
-gpu_index: 0
+# Lista de GPUs a serem utilizadas (distribuição round-robin entre câmeras)
+# Exemplos: [0] para usar apenas GPU 0, [0, 1] para usar GPU 0 e 1, [0, 1, 2, 3] para 4 GPUs
+gpu_devices: [0]
 
 # Tamanho do lote de processamento de detecções para CPU e GPU
 cpu_batch_size: 4
