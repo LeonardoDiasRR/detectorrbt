@@ -125,10 +125,14 @@ class AppSettings:
     
     @property
     def device(self) -> str:
-        """Retorna o dispositivo a ser usado (cuda ou cpu)."""
+        """Retorna o dispositivo a ser usado (cuda ou cpu).
+        
+        Nota: Em configurações multi-GPU, retorna a primeira GPU da lista.
+        O dispositivo específico é definido no momento da criação do modelo.
+        """
         import torch
         if torch.cuda.is_available():
-            return f"cuda:{self.processing.gpu_index}"
+            return f"cuda:{self.processing.gpu_devices[0]}"
         return "cpu"
     
     @property
