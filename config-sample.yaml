@@ -67,6 +67,9 @@ validacao:
   # Confiança mínima do melhor evento para considerar track válido
   # Apenas tracks válidos são enviados ao FindFace
   confianca_minima: 0.43
+  # Largura mínima do bbox do melhor evento (em pixels)
+  # Se o bbox não atingir esta largura, o track não será enviado ao FindFace
+  largura_minima_bbox: 40
 
 # Prefixo dos grupos de câmeras no FindFace
 prefixo_grupo_camera_findface: "TESTE"
