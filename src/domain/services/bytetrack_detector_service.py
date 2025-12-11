@@ -151,6 +151,29 @@ class ByteTrackDetectorService:
             self.logger.info(f"Worker assíncrono FindFace iniciado (fila: {self.findface_queue_size})")
         elif self.findface_adapter is not None and self.findface_queue_size == 0:
             self.logger.info("Fila FindFace desabilitada (findface_queue_size=0) - modo síncrono")
+        
+        # OTIMIZAÇÃO 9: Fila assíncrona para inferência de landmarks em lote
+        self._landmarks_queue: Optional[Queue] = None
+        self._landmarks_worker: Optional[Thread] = None
+        self._landmarks_worker_running = False
+        self._landmarks_results: Dict[int, Optional[np.ndarray]] = {}  # Cache de resultados: event_id -> landmarks
+        self._landmarks_batch_size = batch  # Tamanho do batch para landmarks
+        
+        if self.landmarks_model is not None:
+            # Tamanho da fila: 3x o batch size para buffer
+            landmarks_queue_size = self._landmarks_batch_size * 3
+            self._landmarks_queue = Queue(maxsize=landmarks_queue_size)
+            self._landmarks_worker_running = True
+            self._landmarks_worker = Thread(
+                target=self._landmarks_batch_worker,
+                name=f"Landmarks-Worker-{camera.camera_id.value()}",
+                daemon=True
+            )
+            self._landmarks_worker.start()
+            self.logger.info(
+                f"Worker assíncrono de landmarks iniciado "
+                f"(fila: {landmarks_queue_size}, batch: {self._landmarks_batch_size})"
+            )
 
     def _findface_sender_worker(self):
         """Worker thread dedicado para envios FindFace.
@@ -217,6 +240,106 @@ class ByteTrackDetectorService:
         
         self.logger.info("FindFace worker finalizado")
     
+    def _landmarks_batch_worker(self):
+        """Worker thread dedicado para inferência de landmarks em lote.
+        
+        Acumula crops de faces em batch e processa todos de uma vez,
+        maximizando performance da GPU/CPU.
+        """
+        self.logger.info("Landmarks worker iniciado")
+        
+        batch_buffer = []  # Buffer temporário: [(event_id, face_crop), ...]
+        
+        while self._landmarks_worker_running:
+            try:
+                # Tenta pegar primeiro item (bloqueia até 0.1s)
+                try:
+                    item = self._landmarks_queue.get(timeout=0.1)
+                    
+                    if item is None:  # Sinal de parada
+                        self.logger.info("Landmarks worker recebeu sinal de parada")
+                        break
+                    
+                    batch_buffer.append(item)
+                except:
+                    # Timeout - processa batch parcial se existir
+                    if batch_buffer and not self._landmarks_worker_running:
+                        break
+                    if not batch_buffer:
+                        continue
+                
+                # Acumula até completar batch (ou timeout)
+                while len(batch_buffer) < self._landmarks_batch_size:
+                    try:
+                        item = self._landmarks_queue.get(timeout=0.01)  # Timeout curto
+                        if item is None:
+                            break
+                        batch_buffer.append(item)
+                    except:
+                        break  # Timeout - processa o que tem
+                
+                if not batch_buffer:
+                    continue
+                
+                # Processa batch
+                try:
+                    # Prepara crops para inferência em lote
+                    event_ids = [item[0] for item in batch_buffer]
+                    crops = [item[1] for item in batch_buffer]
+                    
+                    # Infere landmarks em lote
+                    for event_id, crop in zip(event_ids, crops):
+                        try:
+                            if crop.size > 0:
+                                landmarks_result = self.landmarks_model.predict(
+                                    face_crop=crop,
+                                    conf=self.conf,
+                                    verbose=False  # Desabilita logs em batch
+                                )
+                                
+                                if landmarks_result is not None:
+                                    landmarks_array, _ = landmarks_result
+                                    self._landmarks_results[event_id] = landmarks_array
+                                else:
+                                    self._landmarks_results[event_id] = None
+                            else:
+                                self._landmarks_results[event_id] = None
+                        except Exception as e:
+                            if self.verbose_log:
+                                self.logger.warning(
+                                    f"Erro ao processar landmarks para event {event_id}: {e}"
+                                )
+                            self._landmarks_results[event_id] = None
+                    
+                    # Marca tarefas como concluídas
+                    for _ in batch_buffer:
+                        self._landmarks_queue.task_done()
+                    
+                    if self.verbose_log:
+                        self.logger.debug(
+                            f"Batch de {len(batch_buffer)} landmarks processado"
+                        )
+                    
+                except Exception as e:
+                    self.logger.error(f"Erro no processamento de batch de landmarks: {e}")
+                    # Marca tarefas como concluídas mesmo com erro
+                    for _ in batch_buffer:
+                        try:
+                            self._landmarks_queue.task_done()
+                        except:
+                            pass
+                
+                # Limpa buffer
+                batch_buffer.clear()
+                
+            except Exception as e:
+                if not self._landmarks_worker_running:
+                    break
+                self.logger.error(f"Erro no landmarks worker: {e}")
+                continue
+        
+        self.logger.info("Landmarks worker finalizado")
+    
     def start(self):
         """Inicia o processamento do stream de vídeo"""
         self.running = True
@@ -229,6 +352,27 @@ class ByteTrackDetectorService:
     def stop(self):
         """Para o processamento do stream"""
         self.running = False
+        
+        # Finaliza worker de landmarks graciosamente
+        if self._landmarks_queue is not None and self._landmarks_worker is not None:
+            try:
+                self._landmarks_worker_running = False
+                
+                # Envia sinal de parada
+                try:
+                    self._landmarks_queue.put(None, timeout=0.5)
+                except:
+                    self.logger.warning("Não foi possível enviar sinal de parada para landmarks worker")
+                
+                # Aguarda worker finalizar
+                self._landmarks_worker.join(timeout=2.0)
+                
+                if self._landmarks_worker.is_alive():
+                    self.logger.warning("Landmarks worker não finalizou no tempo esperado")
+                else:
+                    self.logger.info("Landmarks worker finalizado com sucesso")
+            except Exception as e:
+                self.logger.error(f"Erro ao finalizar landmarks worker: {e}")
         
         # Finaliza worker FindFace graciosamente
         if self._findface_queue is not None and self._findface_worker is not None:
@@ -377,6 +521,7 @@ class ByteTrackDetectorService:
         :return: Entidade Event.
         """
         self._event_id_counter += 1
+        event_id = self._event_id_counter
         
         # Extrai bbox
         x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -385,30 +530,29 @@ class ByteTrackDetectorService:
         # Extrai confiança
         confidence = ConfidenceVO(float(box.conf[0]))
         
-        # Extrai landmarks usando modelo dedicado (se disponível)
+        # Enfileira crop para inferência assíncrona de landmarks (se disponível)
         landmarks_array = None
-        if self.landmarks_model is not None:
-            # Extrai crop da face para inferência de landmarks
+        if self.landmarks_model is not None and self._landmarks_queue is not None:
             try:
                 # Obtém o ndarray do frame e faz o crop usando coordenadas do bbox
                 frame_array = frame.full_frame.ndarray_readonly
                 face_crop = frame_array[bbox.y1:bbox.y2, bbox.x1:bbox.x2]
                 
-                # Valida crop antes de processar
+                # Enfileira para processamento assíncrono em lote
                 if face_crop.size > 0:
-                    # Executa inferência de landmarks no crop
-                    landmarks_result = self.landmarks_model.predict(
-                        face_crop=face_crop,
-                        conf=self.conf,
-                        verbose=self.verbose_log
-                    )
-                    
-                    if landmarks_result is not None:
-                        landmarks_array, _ = landmarks_result  # Ignora confidence
+                    try:
+                        self._landmarks_queue.put_nowait((event_id, face_crop.copy()))
+                    except:
+                        # Fila cheia - tenta buscar resultado já processado ou usa fallback
+                        if self.verbose_log:
+                            self.logger.debug(f"Fila de landmarks cheia, usando fallback para event {event_id}")
+                
+                # Tenta buscar resultado já processado (se existir)
+                landmarks_array = self._landmarks_results.pop(event_id, None)
                     
             except Exception as e:
                 if self.verbose_log:
-                    self.logger.warning(f"Erro ao extrair landmarks com modelo dedicado: {e}")
+                    self.logger.warning(f"Erro ao enfileirar landmarks: {e}")
         
         # Fallback: usa landmarks do modelo de detecção (se disponível)
         if landmarks_array is None and keypoints is not None and len(keypoints) > index:
@@ -419,7 +563,7 @@ class ByteTrackDetectorService:
         
         # Cria evento (o face_quality_score é calculado automaticamente)
         event = Event(
-            id=IdVO(self._event_id_counter),
+            id=IdVO(event_id),
             frame=frame,
             bbox=bbox,
             confidence=confidence,
@@ -428,7 +572,7 @@ class ByteTrackDetectorService:
         
         return event
 
-    def is_valid(self, track: Track) -> bool:
+    def is_valid(self, track: Track) -> tuple[bool, str]:
         """
         Valida se um track atende às condições necessárias para ser considerado válido.
         
@@ -438,23 +582,34 @@ class ByteTrackDetectorService:
         3. O bbox do melhor evento possui largura mínima adequada
         
         :param track: Track a ser validado.
-        :return: True se o track for válido, False caso contrário.
+        :return: Tupla (is_valid, reason) onde:
+                 - is_valid: True se o track for válido, False caso contrário
+                 - reason: String vazia se válido, ou descrição do motivo da invalidação
         """
         # Verifica movimento
         if not track.has_movement:
-            return False
+            return (False, "sem movimento significativo")
         
         # Verifica confiança do melhor evento
         best_event = track.get_best_event()
         if best_event is None:
-            return False
+            return (False, "sem melhor evento")
         
-        has_sufficient_confidence = best_event.confidence.value() >= self.min_confidence_threshold
+        # Verifica confiança
+        if best_event.confidence.value() < self.min_confidence_threshold:
+            return (
+                False,
+                f"confiança insuficiente ({best_event.confidence.value():.4f} < {self.min_confidence_threshold:.4f})"
+            )
         
         # Verifica largura mínima do bbox
-        has_sufficient_bbox_width = best_event.bbox.width >= self.min_bbox_width
+        if best_event.bbox.width < self.min_bbox_width:
+            return (
+                False,
+                f"bbox pequeno ({best_event.bbox.width}px < {self.min_bbox_width}px)"
+            )
         
-        return has_sufficient_confidence and has_sufficient_bbox_width
+        return (True, "")
 
     def _update_lost_tracks(self, current_frame_tracks: set):
         """
@@ -495,7 +650,7 @@ class ByteTrackDetectorService:
             return
         
         # Verifica se o track é válido
-        is_valid = self.is_valid(track)
+        is_valid, invalid_reason = self.is_valid(track)
         
         # Obtém estatísticas de movimento
         has_movement = track.has_movement
@@ -544,15 +699,11 @@ class ByteTrackDetectorService:
             self._send_best_event_to_findface(track_id, best_event, track.event_count)
         elif not is_valid:
             # Log detalhado do motivo da invalidação
-            movimento_str = "SIM" if has_movement else "NÃO"
-            razao = "sem movimento significativo" if not has_movement else f"confiança insuficiente ({best_confidence:.6f} < {self.min_confidence_threshold:.6f})"
-            
             self.logger.warning(
                 f"Track {track_id} INVÁLIDO - Descartado | "
-                f"Razão: {razao} | "
-                f"Movimento: {movimento_str} | "
-                f"Confiança: {best_confidence:.6f} | "  # Alterado de .2f para .6f
-                f"Threshold mínimo: {self.min_confidence_threshold:.6f}"  # Alterado
+                f"Razão: {invalid_reason} | "
+                f"Confiança: {best_confidence:.4f} | "
+                f"Largura bbox: {best_event.bbox.width}px"
             )
 
     def _save_best_event(self, track_id: int, event: Event, total_events: int, has_movement: bool, is_valid: bool):
