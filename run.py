@@ -112,13 +112,14 @@ queue_listener.start()
 
 # QueueHandler envia logs para a fila (operação instantânea, não bloqueante)
 queue_handler = QueueHandler(log_queue)
+queue_handler.setLevel(logging.INFO)
 
 # Configura root logger para usar apenas o QueueHandler
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[queue_handler],  # Usa apenas fila assíncrona
-    force=True
-)
+# Remove formatters duplicados do root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.handlers.clear()  # Remove handlers existentes
+root_logger.addHandler(queue_handler)
 
 
 # run.py - topo (logo após imports básicos, ANTES de criar modelos/threads)
