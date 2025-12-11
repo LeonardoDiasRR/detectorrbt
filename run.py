@@ -4,7 +4,8 @@ import sys
 import logging
 import traceback
 import threading
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, QueueHandler, QueueListener
+from queue import Queue
 
 # local
 from src.infrastructure import ConfigLoader, AppSettings
@@ -96,10 +97,26 @@ console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
 
-# Configura root logger
+# OTIMIZAÇÃO: Sistema de logging assíncrono com fila para evitar I/O bloqueante
+# Cria fila com capacidade de 10000 mensagens
+log_queue = Queue(maxsize=10000)
+
+# QueueListener processa logs em thread separada (não bloqueia thread principal)
+queue_listener = QueueListener(
+    log_queue,
+    file_handler,
+    console_handler,
+    respect_handler_level=True
+)
+queue_listener.start()
+
+# QueueHandler envia logs para a fila (operação instantânea, não bloqueante)
+queue_handler = QueueHandler(log_queue)
+
+# Configura root logger para usar apenas o QueueHandler
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[file_handler, console_handler],
+    handlers=[queue_handler],  # Usa apenas fila assíncrona
     force=True
 )
 
@@ -332,5 +349,13 @@ if __name__ == "__main__":
         print(f"Erro ao iniciar aplicação: {e}")
         print(traceback.format_exc())
     finally:
+        # Para o queue listener antes de encerrar
+        try:
+            if 'queue_listener' in globals():
+                queue_listener.stop()
+                print("Sistema de logging assíncrono finalizado")
+        except Exception as e:
+            print(f"Erro ao finalizar queue listener: {e}")
+        
         if 'ff' in locals():
             ff.logout()

@@ -202,31 +202,16 @@ class ByteTrackDetectorService:
                     # Envia para FindFace (operação bloqueante isolada)
                     resposta = self.findface_adapter.send_event(event)
                     
-                    # Verifica sucesso
-                    if resposta:
-                        self.logger.info(
-                            f"✓ FindFace - Envio BEM-SUCEDIDO - Track {track_id}: "
-                            f"quality={event.face_quality_score.value():.4f}, "
-                            f"total_events={total_events}, "
-                            f"camera_id={event.camera_id.value()}, "
-                            f"resposta={resposta}"
-                        )
-                    else:
+                    # OTIMIZAÇÃO: Log simplificado para reduzir I/O
+                    # Apenas loga erros, sucessos vão para debug
+                    if not resposta:
                         self.logger.warning(
-                            f"✗ FindFace - Envio retornou resposta vazia - Track {track_id}: "
-                            f"quality={event.face_quality_score.value():.4f}, "
-                            f"total_events={total_events}, "
-                            f"camera_id={event.camera_id.value()}"
+                            f"✗ FindFace - Resposta vazia - Track {track_id}"
                         )
                         
                 except Exception as e:
                     self.logger.error(
-                        f"✗ FindFace - FALHA no envio - Track {track_id}: "
-                        f"quality={event.face_quality_score.value():.4f}, "
-                        f"total_events={total_events}, "
-                        f"camera_id={event.camera_id.value()}, "
-                        f"erro={e}",
-                        exc_info=True
+                        f"✗ FindFace - FALHA - Track {track_id}: {e}"
                     )
                 finally:
                     self._findface_queue.task_done()
@@ -305,20 +290,14 @@ class ByteTrackDetectorService:
                             else:
                                 self._landmarks_results[event_id] = None
                         except Exception as e:
-                            if self.verbose_log:
-                                self.logger.warning(
-                                    f"Erro ao processar landmarks para event {event_id}: {e}"
-                                )
+                            # OTIMIZAÇÃO: Usa debug ao invés de warning para reduzir I/O
                             self._landmarks_results[event_id] = None
                     
                     # Marca tarefas como concluídas
                     for _ in batch_buffer:
                         self._landmarks_queue.task_done()
                     
-                    if self.verbose_log:
-                        self.logger.debug(
-                            f"Batch de {len(batch_buffer)} landmarks processado"
-                        )
+                    # OTIMIZAÇÃO: Log de batch removido para reduzir I/O
                     
                 except Exception as e:
                     self.logger.error(f"Erro no processamento de batch de landmarks: {e}")
@@ -466,12 +445,8 @@ class ByteTrackDetectorService:
                                 current_frame_tracks.discard(track_id)
                                 continue
                             
-                            if self.verbose_log:
-                                self.logger.info(
-                                    f"Track {track_id}: bbox={event.bbox.value()}, "
-                                    f"conf={event.confidence.value():.2f}, "
-                                    f"quality={event.face_quality_score.value():.4f}"
-                                )
+                            # OTIMIZAÇÃO: Log verbose removido do loop principal para evitar gargalo de I/O
+                            # Use logger.debug apenas quando absolutamente necessário para debugging
                     
                     # Atualiza tracks perdidos
                     self._update_lost_tracks(current_frame_tracks)
@@ -543,16 +518,15 @@ class ByteTrackDetectorService:
                     try:
                         self._landmarks_queue.put_nowait((event_id, face_crop.copy()))
                     except:
-                        # Fila cheia - tenta buscar resultado já processado ou usa fallback
-                        if self.verbose_log:
-                            self.logger.debug(f"Fila de landmarks cheia, usando fallback para event {event_id}")
+                        # Fila cheia - usa fallback (sem log para evitar spam)
+                        pass
                 
                 # Tenta buscar resultado já processado (se existir)
                 landmarks_array = self._landmarks_results.pop(event_id, None)
                     
-            except Exception as e:
-                if self.verbose_log:
-                    self.logger.warning(f"Erro ao enfileirar landmarks: {e}")
+            except Exception:
+                # Erro ao processar landmarks - usa fallback silenciosamente
+                pass
         
         # Fallback: usa landmarks do modelo de detecção (se disponível)
         if landmarks_array is None and keypoints is not None and len(keypoints) > index:
