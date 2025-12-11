@@ -77,6 +77,7 @@ class MovementConfig:
 class ValidationConfig:
     """Configuração de validação de tracks."""
     min_confidence: float = 0.45
+    min_bbox_width: int = 60
 
 
 @dataclass

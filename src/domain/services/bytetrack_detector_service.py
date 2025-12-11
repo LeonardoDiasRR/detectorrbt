@@ -49,6 +49,7 @@ class ByteTrackDetectorService:
         min_movement_threshold: float = 50.0,
         min_movement_percentage: float = 0.1,
         min_confidence_threshold: float = 0.45,
+        min_bbox_width: int = 60,
         max_frames_per_track: int = 900,  # RENOMEADO
         inference_size: int = 640,  # NOVO: Tamanho da imagem para inferência
         detection_skip_frames: int = 1,  # NOVO: Detectar a cada N frames (tracking continua em todos)
@@ -74,6 +75,7 @@ class ByteTrackDetectorService:
         :param min_movement_threshold: Limite mínimo de movimento em pixels.
         :param min_movement_percentage: Percentual mínimo de frames com movimento (0.0 a 1.0).
         :param min_confidence_threshold: Confiança mínima para considerar track válido.
+        :param min_bbox_width: Largura mínima do bbox do melhor evento (em pixels).
         :param max_frames_per_track: Máximo de frames permitidos por track.
         :param inference_size: Tamanho da imagem para inferência (ex: 640, 1280).
         :param detection_skip_frames: Realiza detecção a cada N frames (tracking continua em todos os frames).
@@ -107,6 +109,7 @@ class ByteTrackDetectorService:
         self.min_movement_threshold = min_movement_threshold
         self.min_movement_percentage = min_movement_percentage
         self.min_confidence_threshold = min_confidence_threshold
+        self.min_bbox_width = min_bbox_width
         self.max_frames_per_track = max_frames_per_track  # RENOMEADO
         self.inference_size = inference_size  # NOVO
         self.detection_skip_frames = max(1, detection_skip_frames)  # NOVO: mínimo 1
@@ -432,6 +435,7 @@ class ByteTrackDetectorService:
         Um track é válido se:
         1. Possui movimento significativo
         2. O melhor evento possui confiança acima do limiar mínimo
+        3. O bbox do melhor evento possui largura mínima adequada
         
         :param track: Track a ser validado.
         :return: True se o track for válido, False caso contrário.
@@ -447,7 +451,10 @@ class ByteTrackDetectorService:
         
         has_sufficient_confidence = best_event.confidence.value() >= self.min_confidence_threshold
         
-        return has_sufficient_confidence
+        # Verifica largura mínima do bbox
+        has_sufficient_bbox_width = best_event.bbox.width >= self.min_bbox_width
+        
+        return has_sufficient_confidence and has_sufficient_bbox_width
 
     def _update_lost_tracks(self, current_frame_tracks: set):
         """

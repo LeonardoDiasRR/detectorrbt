@@ -127,7 +127,8 @@ class ConfigLoader:
         )
         
         validation_config = ValidationConfig(
-            min_confidence=yaml_config.get("validacao", {}).get("confianca_minima", 0.45)
+            min_confidence=yaml_config.get("validacao", {}).get("confianca_minima", 0.45),
+            min_bbox_width=yaml_config.get("validacao", {}).get("largura_minima_bbox", 60)
         )
         
         # Configuração TensorRT
