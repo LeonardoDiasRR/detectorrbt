@@ -14,7 +14,12 @@ max_frames_lost: 30
 max_frames_por_track: 900
 
 # Modelo de detecção facial
-face_detection_model: "yolov8n-face.pt"
+face_detection_model: "yolo-models/yolov12n-face.pt"
+
+# Modelo de detecção de landmarks faciais (keypoints)
+# Usado para cálculo de frontalidade e pose da face
+# Deve ser um modelo YOLO que retorne keypoints (ex: yolov8n-face.pt)
+landmarks_detection_model: "yolo-models/yolov8n-face.pt"
 
 # Modelo de rastreamento
 # Opções:

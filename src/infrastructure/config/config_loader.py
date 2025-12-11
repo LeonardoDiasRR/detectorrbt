@@ -87,6 +87,7 @@ class ConfigLoader:
         # Monta configurações
         yolo_config = YOLOConfig(
             model_path=yaml_config.get("face_detection_model", "yolov8n-face.pt"),
+            landmarks_model_path=yaml_config.get("landmarks_detection_model", "yolov8n-face.pt"),
             conf_threshold=yaml_config.get("conf", 0.1),
             iou_threshold=yaml_config.get("iou", 0.2)
         )

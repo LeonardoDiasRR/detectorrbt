@@ -20,6 +20,7 @@ from src.domain.adapters.findface_adapter import FindfaceAdapter
 from src.domain.entities import Camera, Frame, Event, Track
 from src.domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO, TimestampVO, FullFrameVO
 from src.domain.services.model_interface import IDetectionModel
+from src.domain.services.landmarks_model_interface import ILandmarksModel
 
 
 class ByteTrackDetectorService:
@@ -32,6 +33,7 @@ class ByteTrackDetectorService:
         self,
         camera: Camera,
         detection_model: IDetectionModel,  # ALTERADO de yolo_model
+        landmarks_model: Optional[ILandmarksModel] = None,  # NOVO: Modelo para landmarks faciais
         findface_adapter: Optional[FindfaceAdapter] = None,
         tracker: str = "bytetrack.yaml",
         batch: int = 4,
@@ -57,6 +59,7 @@ class ByteTrackDetectorService:
 
         :param camera: Entidade Camera com informações da câmera.
         :param detection_model: Modelo YOLO para detecção de faces.
+        :param landmarks_model: Modelo para detecção de landmarks faciais (opcional).
         :param findface_adapter: Adapter para comunicação com FindFace (opcional).
         :param tracker: Arquivo de configuração do tracker ByteTrack.
         :param batch: Tamanho do batch para processamento.
@@ -88,6 +91,7 @@ class ByteTrackDetectorService:
         
         self.camera = camera
         self.model = detection_model  # ALTERADO
+        self.landmarks_model = landmarks_model  # NOVO: Modelo de landmarks
         self.findface_adapter = findface_adapter
         self.tracker = tracker
         self.batch = batch
@@ -378,11 +382,32 @@ class ByteTrackDetectorService:
         # Extrai confiança
         confidence = ConfidenceVO(float(box.conf[0]))
         
-        # Extrai landmarks
+        # Extrai landmarks usando modelo dedicado (se disponível)
         landmarks_array = None
-        if keypoints is not None and len(keypoints) > index:
+        if self.landmarks_model is not None:
+            # Extrai crop da face para inferência de landmarks
+            try:
+                face_crop = frame.full_frame.get_crop(bbox)
+                
+                # Executa inferência de landmarks no crop
+                landmarks_result = self.landmarks_model.predict(
+                    face_crop=face_crop,
+                    conf=self.conf,
+                    verbose=self.verbose_log
+                )
+                
+                if landmarks_result is not None:
+                    landmarks_array, _ = landmarks_result  # Ignora confidence
+                    
+            except Exception as e:
+                if self.verbose_log:
+                    self.logger.warning(f"Erro ao extrair landmarks com modelo dedicado: {e}")
+        
+        # Fallback: usa landmarks do modelo de detecção (se disponível)
+        if landmarks_array is None and keypoints is not None and len(keypoints) > index:
             kpts = keypoints[index].xy[0].cpu().numpy()
             landmarks_array = kpts
+        
         landmarks = LandmarksVO(landmarks_array)
         
         # Cria evento (o face_quality_score é calculado automaticamente)

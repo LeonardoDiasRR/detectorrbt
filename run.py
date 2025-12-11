@@ -14,6 +14,7 @@ from src.domain.services import ByteTrackDetectorService
 from src.domain.entities import Camera
 from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
 from src.infrastructure.model import ModelFactory
+from src.infrastructure.model.landmarks_model_factory import LandmarksModelFactory
 
 # Suprimir avisos do OpenCV e Ultralytics
 os.environ['OPENCV_LOG_LEVEL'] = 'ERROR'
@@ -204,15 +205,41 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
             
             model_info = detection_model.get_model_info()
             logger.info(
-                f"[{i}/{len(cameras_ff)}] Modelo carregado: "
+                f"[{i}/{len(cameras_ff)}] Modelo de detecção carregado: "
                 f"backend={model_info['backend']}, "
                 f"device={model_info['device']}, "
                 f"precision={model_info['precision']}"
             )
             
+            # Carrega modelo de landmarks (se configurado)
+            landmarks_model = None
+            if settings.yolo.landmarks_model_path:
+                try:
+                    logger.info(f"[{i}/{len(cameras_ff)}] Carregando modelo de landmarks para câmera {camera.camera_name.value()}...")
+                    
+                    device_name = f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu"
+                    landmarks_model = LandmarksModelFactory.create(
+                        model_path=settings.yolo.landmarks_model_path,
+                        device=device_name
+                    )
+                    
+                    landmarks_info = landmarks_model.get_model_info()
+                    logger.info(
+                        f"[{i}/{len(cameras_ff)}] Modelo de landmarks carregado: "
+                        f"backend={landmarks_info['backend']}, "
+                        f"device={landmarks_info['device']}, "
+                        f"keypoints={landmarks_info['num_keypoints']}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[{i}/{len(cameras_ff)}] Erro ao carregar modelo de landmarks: {e}. "
+                        f"Prosseguindo sem landmarks dedicado."
+                    )
+            
             processor = ByteTrackDetectorService(
                 camera=camera,
                 detection_model=detection_model,
+                landmarks_model=landmarks_model,
                 findface_adapter=findface_adapter,
                 tracker=settings.bytetrack.tracker_config,
                 batch=settings.batch_size,
