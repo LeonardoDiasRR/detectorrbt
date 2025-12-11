@@ -387,17 +387,21 @@ class ByteTrackDetectorService:
         if self.landmarks_model is not None:
             # Extrai crop da face para inferência de landmarks
             try:
-                face_crop = frame.full_frame.get_crop(bbox)
+                # Obtém o ndarray do frame e faz o crop usando coordenadas do bbox
+                frame_array = frame.full_frame.ndarray_readonly
+                face_crop = frame_array[bbox.y1:bbox.y2, bbox.x1:bbox.x2]
                 
-                # Executa inferência de landmarks no crop
-                landmarks_result = self.landmarks_model.predict(
-                    face_crop=face_crop,
-                    conf=self.conf,
-                    verbose=self.verbose_log
-                )
-                
-                if landmarks_result is not None:
-                    landmarks_array, _ = landmarks_result  # Ignora confidence
+                # Valida crop antes de processar
+                if face_crop.size > 0:
+                    # Executa inferência de landmarks no crop
+                    landmarks_result = self.landmarks_model.predict(
+                        face_crop=face_crop,
+                        conf=self.conf,
+                        verbose=self.verbose_log
+                    )
+                    
+                    if landmarks_result is not None:
+                        landmarks_array, _ = landmarks_result  # Ignora confidence
                     
             except Exception as e:
                 if self.verbose_log:
