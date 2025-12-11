@@ -74,8 +74,8 @@ class MovementConfig:
 
 
 @dataclass
-class ValidationConfig:
-    """Configuração de validação de tracks."""
+class DetectionFilterConfig:
+    """Configuração de filtros de detecção (aplicados antes de criar evento)."""
     min_confidence: float = 0.45
     min_bbox_width: int = 60
 
@@ -118,7 +118,7 @@ class AppSettings:
     processing: ProcessingConfig
     storage: StorageConfig
     movement: MovementConfig
-    validation: ValidationConfig
+    detection_filter: DetectionFilterConfig
     performance: PerformanceConfig
     tensorrt: TensorRTConfig
     openvino: OpenVINOConfig

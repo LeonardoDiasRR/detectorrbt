@@ -4,11 +4,11 @@
 gpu_devices: [0]
 
 # Tamanho do lote de processamento de detecções para CPU e GPU
-cpu_batch_size: 4
-gpu_batch_size: 16
+cpu_batch_size: 1
+gpu_batch_size: 32
 
 # Limite de frames sem detecção para considerar o objeto perdido
-max_frames_lost: 30
+max_frames_lost: 60
 
 # Limite máximo de frames por track
 max_frames_por_track: 900
@@ -29,15 +29,15 @@ tracker: "bytetrack.yaml"
 
 # Confiança mínima para considerar uma detecção válida
 conf: 0.1  # Valor padrão: 0.1 igual o do algoritmo ByteTrack
-iou: 0.05 # Mais permissivo, mantêm o track por mais tempo
+iou: 0.15 # Quanto maior, mais restritivo
 
 # Exibir na tela
 show: false
 
 # Pesos na escolha da melhor face do track
 qualidade_face:
-  confianca_deteccao: 3
-  tamanho_bbox: 4
+  confianca_deteccao: 2
+  tamanho_bbox: 3
   face_frontal: 6
   proporcao_bbox: 1
   nitidez: 1
@@ -62,13 +62,13 @@ movimento:
   # Se menos que esse percentual tiver movimento, considera sem movimento
   percentual_minimo_frames: 0.1  # 10% dos frames
 
-# Validação do track
-validacao:
-  # Confiança mínima do melhor evento para considerar track válido
-  # Apenas tracks válidos são enviados ao FindFace
+# Filtros de detecção (aplicados antes de criar evento)
+filtro_deteccao:
+  # Confiança mínima da detecção para criar evento
+  # Detecções abaixo deste valor são descartadas
   confianca_minima: 0.43
-  # Largura mínima do bbox do melhor evento (em pixels)
-  # Se o bbox não atingir esta largura, o track não será enviado ao FindFace
+  # Largura mínima do bbox da detecção (em pixels)
+  # Detecções com bbox menor que este valor são descartadas
   largura_minima_bbox: 40
 
 # Prefixo dos grupos de câmeras no FindFace
@@ -85,7 +85,7 @@ performance:
   # Ativa batch processing de qualidade facial
   batch_quality_calculation: true
   # Tamanho da fila assíncrona para envios FindFace (200 = padrão, 0 = desabilita fila)
-  findface_queue_size: 200
+  findface_queue_size: 500
 
 # Configurações TensorRT (melhor performance em GPUs NVIDIA)
 tensorrt:

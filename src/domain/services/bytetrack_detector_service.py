@@ -425,6 +425,31 @@ class ByteTrackDetectorService:
                     if should_detect and result.boxes is not None and result.boxes.id is not None:
                         for i, box in enumerate(result.boxes):
                             track_id = int(box.id[0])
+                            
+                            # FILTRO DE DETECÇÃO: Aplica filtros ANTES de criar evento
+                            # Extrai dados para validação
+                            confidence = float(box.conf[0])
+                            x1, y1, x2, y2 = map(int, box.xyxy[0])
+                            bbox_width = x2 - x1
+                            
+                            # Filtra por confiança mínima
+                            if confidence < self.min_confidence_threshold:
+                                if self.verbose_log:
+                                    self.logger.warning(
+                                        f"Detecção rejeitada (Track {track_id}): "
+                                        f"confiança insuficiente ({confidence:.4f} < {self.min_confidence_threshold:.4f})"
+                                    )
+                                continue
+                            
+                            # Filtra por largura mínima do bbox
+                            if bbox_width < self.min_bbox_width:
+                                if self.verbose_log:
+                                    self.logger.warning(
+                                        f"Detecção rejeitada (Track {track_id}): "
+                                        f"bbox pequeno ({bbox_width}px < {self.min_bbox_width}px)"
+                                    )
+                                continue
+                            
                             current_frame_tracks.add(track_id)
                             
                             # Cria Event para esta detecção
@@ -562,38 +587,25 @@ class ByteTrackDetectorService:
         """
         Valida se um track atende às condições necessárias para ser considerado válido.
         
-        Um track é válido se:
-        1. Possui movimento significativo
-        2. O melhor evento possui confiança acima do limiar mínimo
-        3. O bbox do melhor evento possui largura mínima adequada
+        Um track é válido se possui movimento significativo.
+        
+        NOTA: Filtros de confiança e tamanho do bbox são aplicados durante a detecção,
+        antes de criar os eventos. Portanto, todos os eventos do track já passaram
+        por esses filtros.
         
         :param track: Track a ser validado.
         :return: Tupla (is_valid, reason) onde:
                  - is_valid: True se o track for válido, False caso contrário
                  - reason: String vazia se válido, ou descrição do motivo da invalidação
         """
-        # Verifica movimento
-        if not track.has_movement:
-            return (False, "sem movimento significativo")
-        
-        # Verifica confiança do melhor evento
+        # Verifica se possui melhor evento
         best_event = track.get_best_event()
         if best_event is None:
             return (False, "sem melhor evento")
         
-        # Verifica confiança
-        if best_event.confidence.value() < self.min_confidence_threshold:
-            return (
-                False,
-                f"confiança insuficiente ({best_event.confidence.value():.4f} < {self.min_confidence_threshold:.4f})"
-            )
-        
-        # Verifica largura mínima do bbox
-        if best_event.bbox.width < self.min_bbox_width:
-            return (
-                False,
-                f"bbox pequeno ({best_event.bbox.width}px < {self.min_bbox_width}px)"
-            )
+        # Verifica movimento
+        if not track.has_movement:
+            return (False, "sem movimento significativo")
         
         return (True, "")
 

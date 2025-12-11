@@ -18,7 +18,7 @@ from .settings import (
     ProcessingConfig,
     StorageConfig,
     CameraConfig,
-    ValidationConfig,
+    DetectionFilterConfig,
     MovementConfig,
     TensorRTConfig,
     OpenVINOConfig,
@@ -126,9 +126,9 @@ class ConfigLoader:
             min_movement_frame_percentage=yaml_config.get("movimento", {}).get("percentual_minimo_frames", 0.1)
         )
         
-        validation_config = ValidationConfig(
-            min_confidence=yaml_config.get("validacao", {}).get("confianca_minima", 0.45),
-            min_bbox_width=yaml_config.get("validacao", {}).get("largura_minima_bbox", 60)
+        detection_filter_config = DetectionFilterConfig(
+            min_confidence=yaml_config.get("filtro_deteccao", {}).get("confianca_minima", 0.45),
+            min_bbox_width=yaml_config.get("filtro_deteccao", {}).get("largura_minima_bbox", 60)
         )
         
         # Configuração TensorRT
@@ -172,7 +172,7 @@ class ConfigLoader:
             processing=processing_config,
             storage=storage_config,
             movement=movement_config,
-            validation=validation_config,
+            detection_filter=detection_filter_config,
             tensorrt=tensorrt_config,
             openvino=openvino_config,
             performance=performance_config,
