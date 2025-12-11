@@ -11,7 +11,7 @@ from queue import Queue
 from src.infrastructure import ConfigLoader, AppSettings
 from src.infrastructure.external.findface_client import create_findface_client
 from src.domain.adapters import FindfaceAdapter
-from src.domain.services import ByteTrackDetectorService
+from src.domain.services import ByteTrackDetectorService, ImageSaveService
 from src.domain.entities import Camera
 from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
 from src.infrastructure.model import ModelFactory
@@ -161,6 +161,11 @@ except Exception as e:
 def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     logger = logging.getLogger(__name__)
     
+    # OTIMIZAÇÃO: Cria serviço assíncrono para salvamento de imagens
+    # Compartilhado entre todas as câmeras para centralizar I/O
+    image_save_service = ImageSaveService()
+    logger.info("ImageSaveService iniciado (fila: 200)")
+    
     # Limpa o diretório de imagens antes de iniciar
     imagens_dir = os.path.join(os.path.dirname(__file__), settings.storage.project_dir)
     if os.path.exists(imagens_dir):
@@ -259,6 +264,7 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
                 detection_model=detection_model,
                 landmarks_model=landmarks_model,
                 findface_adapter=findface_adapter,
+                image_save_service=image_save_service,
                 tracker=settings.bytetrack.tracker_config,
                 batch=settings.batch_size,
                 show=settings.processing.show_video,
@@ -357,6 +363,14 @@ if __name__ == "__main__":
                 print("Sistema de logging assíncrono finalizado")
         except Exception as e:
             print(f"Erro ao finalizar queue listener: {e}")
+        
+        # Para o ImageSaveService
+        try:
+            if 'image_save_service' in locals():
+                image_save_service.stop()
+                print("ImageSaveService finalizado")
+        except Exception as e:
+            print(f"Erro ao finalizar ImageSaveService: {e}")
         
         if 'ff' in locals():
             ff.logout()

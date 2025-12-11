@@ -21,6 +21,7 @@ from src.domain.entities import Camera, Frame, Event, Track
 from src.domain.value_objects import IdVO, BboxVO, ConfidenceVO, LandmarksVO, TimestampVO, FullFrameVO
 from src.domain.services.model_interface import IDetectionModel
 from src.domain.services.landmarks_model_interface import ILandmarksModel
+from src.domain.services.image_save_service import ImageSaveService
 
 
 class ByteTrackDetectorService:
@@ -35,6 +36,7 @@ class ByteTrackDetectorService:
         detection_model: IDetectionModel,  # ALTERADO de yolo_model
         landmarks_model: Optional[ILandmarksModel] = None,  # NOVO: Modelo para landmarks faciais
         findface_adapter: Optional[FindfaceAdapter] = None,
+        image_save_service: Optional[ImageSaveService] = None,  # NOVO: Serviço assíncrono de salvamento
         tracker: str = "bytetrack.yaml",
         batch: int = 4,
         show: bool = True,
@@ -62,6 +64,7 @@ class ByteTrackDetectorService:
         :param detection_model: Modelo YOLO para detecção de faces.
         :param landmarks_model: Modelo para detecção de landmarks faciais (opcional).
         :param findface_adapter: Adapter para comunicação com FindFace (opcional).
+        :param image_save_service: Serviço assíncrono de salvamento de imagens (opcional).
         :param tracker: Arquivo de configuração do tracker ByteTrack.
         :param batch: Tamanho do batch para processamento.
         :param show: Se deve exibir o vídeo processado.
@@ -95,6 +98,7 @@ class ByteTrackDetectorService:
         self.model = detection_model  # ALTERADO
         self.landmarks_model = landmarks_model  # NOVO: Modelo de landmarks
         self.findface_adapter = findface_adapter
+        self.image_save_service = image_save_service  # NOVO: Serviço de salvamento assíncrono
         self.tracker = tracker
         self.batch = batch
         self.show = show
@@ -331,6 +335,14 @@ class ByteTrackDetectorService:
     def stop(self):
         """Para o processamento do stream"""
         self.running = False
+        
+        # Finaliza serviço de salvamento de imagens
+        if self.image_save_service is not None:
+            try:
+                self.image_save_service.stop()
+                self.logger.info("ImageSaveService finalizado com sucesso")
+            except Exception as e:
+                self.logger.error(f"Erro ao finalizar ImageSaveService: {e}")
         
         # Finaliza worker de landmarks graciosamente
         if self._landmarks_queue is not None and self._landmarks_worker is not None:
@@ -654,9 +666,9 @@ class ByteTrackDetectorService:
         if track_id in self.track_frame_count:  # NOVO: limpa contador de frames
             del self.track_frame_count[track_id]
         
-        # OTIMIZAÇÃO 7: Coleta de lixo periódica a cada 100 tracks
+        # OTIMIZAÇÃO 7: Coleta de lixo periódica a cada 500 tracks (reduz overhead)
         self._tracks_finalized_count += 1
-        if self._tracks_finalized_count % 100 == 0:
+        if self._tracks_finalized_count % 500 == 0:
             import gc
             gc.collect()
             self.logger.debug(f"Coleta de lixo executada após {self._tracks_finalized_count} tracks finalizados")
@@ -761,7 +773,13 @@ class ByteTrackDetectorService:
                 from pathlib import Path
                 filepath = Path(self.project_dir) / self.results_dir / filename
                 filepath.parent.mkdir(parents=True, exist_ok=True)
-                cv2.imwrite(str(filepath), frame_with_bbox, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                
+                # OTIMIZAÇÃO: Salvamento assíncrono via ImageSaveService
+                if self.image_save_service is not None:
+                    self.image_save_service.save_async(frame_with_bbox, filepath, jpeg_quality=95)
+                else:
+                    # Fallback síncrono se o serviço não foi fornecido
+                    cv2.imwrite(str(filepath), frame_with_bbox, [cv2.IMWRITE_JPEG_QUALITY, 95])
             
             status_msg = "VÁLIDO" if is_valid else "INVÁLIDO"
             save_status = "salva" if self.save_images else "não salva (desabilitado)"
