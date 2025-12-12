@@ -792,15 +792,16 @@ class ByteTrackDetectorService:
                 else:
                     # Fallback síncrono se o serviço não foi fornecido
                     cv2.imwrite(str(filepath), frame_with_bbox, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            
-            status_msg = "VÁLIDO" if is_valid else "INVÁLIDO"
-            save_status = "salva" if self.save_images else "não salva (desabilitado)"
-            self.logger.info(
-                f"Melhor face {save_status} ({status_msg}): {filename} "
-                f"(quality={event.face_quality_score.value():.4f}, "
-                f"conf={event.confidence.value():.2f}) | "
-                f"Total de eventos: {total_events}"
-            )
+                
+                # Log de salvamento apenas em modo verboso
+                if self.verbose_log:
+                    status_msg = "VÁLIDO" if is_valid else "INVÁLIDO"
+                    self.logger.info(
+                        f"Melhor face salva ({status_msg}): {filename} "
+                        f"(quality={event.face_quality_score.value():.4f}, "
+                        f"conf={event.confidence.value():.2f}) | "
+                        f"Total de eventos: {total_events}"
+                    )
             
         except Exception as e:
             self.logger.error(f"Erro ao salvar evento do track {track_id}: {e}", exc_info=True)
