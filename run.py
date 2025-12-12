@@ -166,6 +166,71 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     image_save_service = ImageSaveService()
     logger.info("ImageSaveService iniciado (fila: 200)")
     
+    # OTIMIZAÇÃO: Fila FindFace global compartilhada por todas as câmeras
+    # Pool de N/2 workers (onde N = número de CPUs)
+    import multiprocessing
+    from queue import Queue
+    
+    num_cpus = multiprocessing.cpu_count()
+    num_findface_workers = max(1, num_cpus // 2)  # Mínimo de 1 worker
+    findface_queue = Queue(maxsize=500)  # Fila global
+    findface_workers = []
+    findface_workers_running = True
+    
+    logger.info(f"Criando fila FindFace global com {num_findface_workers} workers (CPUs: {num_cpus})")
+    
+    def findface_worker_func(worker_id, queue, adapter, running_flag_container):
+        """Worker FindFace que processa eventos de todas as câmeras."""
+        worker_logger = logging.getLogger(f"FindFaceWorker-{worker_id}")
+        worker_logger.info(f"Worker {worker_id} iniciado")
+        
+        while running_flag_container[0]:
+            try:
+                event_data = queue.get(timeout=0.5)
+                
+                if event_data is None:  # Sinal de parada
+                    worker_logger.info(f"Worker {worker_id} recebeu sinal de parada")
+                    break
+                
+                camera_id, camera_name, track_id, event, total_events = event_data
+                
+                try:
+                    resposta = adapter.send_event(event)
+                    
+                    if not resposta:
+                        worker_logger.warning(
+                            f"✗ FindFace - Resposta vazia - Camera {camera_id} Track {track_id}"
+                        )
+                except Exception as e:
+                    worker_logger.error(
+                        f"✗ FindFace - FALHA - Camera {camera_id} Track {track_id}: {e}"
+                    )
+                finally:
+                    queue.task_done()
+                    
+            except Exception:
+                if not running_flag_container[0]:
+                    break
+                continue
+        
+        worker_logger.info(f"Worker {worker_id} finalizado")
+    
+    # Container mutável para flag de running (compartilhado entre workers)
+    findface_running_flag = [True]
+    
+    # Cria pool de workers FindFace
+    for i in range(num_findface_workers):
+        worker_thread = threading.Thread(
+            target=findface_worker_func,
+            args=(i + 1, findface_queue, findface_adapter, findface_running_flag),
+            name=f"FindFaceWorker-{i + 1}",
+            daemon=True
+        )
+        worker_thread.start()
+        findface_workers.append(worker_thread)
+    
+    logger.info(f"Pool de {num_findface_workers} workers FindFace iniciado")
+    
     # Limpa o diretório de imagens antes de iniciar
     imagens_dir = os.path.join(os.path.dirname(__file__), settings.storage.project_dir)
     if os.path.exists(imagens_dir):
@@ -264,6 +329,7 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
                 detection_model=detection_model,
                 landmarks_model=landmarks_model,
                 findface_adapter=findface_adapter,
+                findface_queue=findface_queue,  # Fila global compartilhada
                 image_save_service=image_save_service,
                 tracker=settings.bytetrack.tracker_config,
                 batch=settings.batch_size,
@@ -281,8 +347,7 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
                 min_bbox_width=settings.detection_filter.min_bbox_width,
                 max_frames_per_track=settings.bytetrack.max_frames_per_track,
                 inference_size=settings.performance.inference_size,
-                detection_skip_frames=settings.performance.detection_skip_frames,
-                findface_queue_size=settings.performance.findface_queue_size
+                detection_skip_frames=settings.performance.detection_skip_frames
             )
             processors.append(processor)
             
@@ -326,8 +391,29 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
         for proc in processors:
             proc.stop()
         
-        # Aguarda threads finalizarem (timeout de 5 segundos por thread)
-        logger.info("Aguardando threads finalizarem...")
+        # Finaliza workers FindFace globais
+        logger.info("Finalizando pool de workers FindFace...")
+        findface_running_flag[0] = False
+        
+        # Envia sinais de parada para todos os workers
+        for i in range(num_findface_workers):
+            try:
+                findface_queue.put(None, timeout=0.5)
+            except:
+                pass
+        
+        # Aguarda workers FindFace finalizarem
+        for i, worker in enumerate(findface_workers, 1):
+            worker.join(timeout=2.0)
+            if worker.is_alive():
+                logger.warning(f"FindFace worker {i}/{num_findface_workers} não finalizou no tempo esperado")
+            else:
+                logger.info(f"FindFace worker {i}/{num_findface_workers} finalizado")
+        
+        logger.info("✓ Pool de workers FindFace finalizado")
+        
+        # Aguarda threads de câmeras finalizarem (timeout de 5 segundos por thread)
+        logger.info("Aguardando threads de câmeras finalizarem...")
         for i, thread in enumerate(threads, 1):
             thread.join(timeout=5.0)
             if thread.is_alive():

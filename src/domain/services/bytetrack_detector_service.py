@@ -36,6 +36,7 @@ class ByteTrackDetectorService:
         detection_model: IDetectionModel,  # ALTERADO de yolo_model
         landmarks_model: Optional[ILandmarksModel] = None,  # NOVO: Modelo para landmarks faciais
         findface_adapter: Optional[FindfaceAdapter] = None,
+        findface_queue: Optional[Queue] = None,  # NOVO: Fila FindFace global compartilhada
         image_save_service: Optional[ImageSaveService] = None,  # NOVO: Serviço assíncrono de salvamento
         tracker: str = "bytetrack.yaml",
         batch: int = 4,
@@ -54,8 +55,7 @@ class ByteTrackDetectorService:
         min_bbox_width: int = 60,
         max_frames_per_track: int = 900,  # RENOMEADO
         inference_size: int = 640,  # NOVO: Tamanho da imagem para inferência
-        detection_skip_frames: int = 1,  # NOVO: Detectar a cada N frames (tracking continua em todos)
-        findface_queue_size: int = 200  # NOVO: Tamanho da fila assíncrona FindFace
+        detection_skip_frames: int = 1  # NOVO: Detectar a cada N frames (tracking continua em todos)
     ):
         """
         Inicializa o serviço de detecção de faces.
@@ -64,6 +64,7 @@ class ByteTrackDetectorService:
         :param detection_model: Modelo YOLO para detecção de faces.
         :param landmarks_model: Modelo para detecção de landmarks faciais (opcional).
         :param findface_adapter: Adapter para comunicação com FindFace (opcional).
+        :param findface_queue: Fila FindFace global compartilhada entre câmeras (opcional).
         :param image_save_service: Serviço assíncrono de salvamento de imagens (opcional).
         :param tracker: Arquivo de configuração do tracker ByteTrack.
         :param batch: Tamanho do batch para processamento.
@@ -117,9 +118,7 @@ class ByteTrackDetectorService:
         self.max_frames_per_track = max_frames_per_track  # RENOMEADO
         self.inference_size = inference_size  # NOVO
         self.detection_skip_frames = max(1, detection_skip_frames)  # NOVO: mínimo 1
-        self.findface_queue_size = findface_queue_size  # NOVO: tamanho da fila FindFace
         self.running = False
-        self._findface_worker_running = False  # NOVO: controle separado para worker FindFace
         
         self.logger = logging.getLogger(
             f"ByteTrackDetectorService_{camera.camera_id.value()}_{camera.camera_name.value()}"
@@ -140,21 +139,12 @@ class ByteTrackDetectorService:
         # OTIMIZAÇÃO 3: Contador de frames para skip frames
         self._frame_counter = 0
         
-        # OTIMIZAÇÃO 8: Fila assíncrona para envios FindFace
-        self._findface_queue: Optional[Queue] = None
-        self._findface_worker: Optional[Thread] = None
-        if self.findface_adapter is not None and self.findface_queue_size > 0:
-            self._findface_queue = Queue(maxsize=self.findface_queue_size)
-            self._findface_worker_running = True  # Ativa worker ANTES de iniciar thread
-            self._findface_worker = Thread(
-                target=self._findface_sender_worker,
-                name=f"FindFace-Worker-{camera.camera_id.value()}",
-                daemon=True
-            )
-            self._findface_worker.start()
-            self.logger.info(f"Worker assíncrono FindFace iniciado (fila: {self.findface_queue_size})")
-        elif self.findface_adapter is not None and self.findface_queue_size == 0:
-            self.logger.info("Fila FindFace desabilitada (findface_queue_size=0) - modo síncrono")
+        # OTIMIZAÇÃO 8: Fila FindFace global compartilhada (não cria worker próprio)
+        self._findface_queue = findface_queue
+        if self._findface_queue is not None:
+            self.logger.info("Usando fila FindFace global compartilhada")
+        elif self.findface_adapter is not None:
+            self.logger.info("Fila FindFace não fornecida - modo síncrono")
         
         # OTIMIZAÇÃO 9: Fila assíncrona para inferência de landmarks em lote
         self._landmarks_queue: Optional[Queue] = None
@@ -179,55 +169,8 @@ class ByteTrackDetectorService:
                 f"(fila: {landmarks_queue_size}, batch: {self._landmarks_batch_size})"
             )
 
-    def _findface_sender_worker(self):
-        """Worker thread dedicado para envios FindFace.
-        
-        Processa eventos da fila de forma assíncrona, evitando bloquear
-        a thread principal de detecção/tracking.
-        """
-        self.logger.info("FindFace worker iniciado")
-        while self._findface_worker_running:
-            try:
-                # Aguarda evento com timeout curto para responder rapidamente a _findface_worker_running
-                event_data = self._findface_queue.get(timeout=0.5)
-                
-                if event_data is None:  # Sinal de parada
-                    self.logger.info("FindFace worker recebeu sinal de parada")
-                    break
-                
-                # Verifica novamente se ainda está rodando
-                if not self._findface_worker_running:
-                    self.logger.info("FindFace worker interrompido (_findface_worker_running=False)")
-                    break
-                
-                track_id, event, total_events = event_data
-                
-                try:
-                    # Envia para FindFace (operação bloqueante isolada)
-                    resposta = self.findface_adapter.send_event(event)
-                    
-                    # OTIMIZAÇÃO: Log simplificado para reduzir I/O
-                    # Apenas loga erros, sucessos vão para debug
-                    if not resposta:
-                        self.logger.warning(
-                            f"✗ FindFace - Resposta vazia - Track {track_id}"
-                        )
-                        
-                except Exception as e:
-                    self.logger.error(
-                        f"✗ FindFace - FALHA - Track {track_id}: {e}"
-                    )
-                finally:
-                    self._findface_queue.task_done()
-                    
-            except Exception as e:
-                # Timeout ou erro no get() - continua loop se ainda running
-                if not self._findface_worker_running:
-                    break
-                # Ignora timeout (Queue.Empty)
-                continue
-        
-        self.logger.info("FindFace worker finalizado")
+    # Worker FindFace agora é global (pool de workers em run.py)
+    # Método _findface_sender_worker removido - workers globais processam fila compartilhada
     
     def _landmarks_batch_worker(self):
         """Worker thread dedicado para inferência de landmarks em lote.
@@ -365,27 +308,7 @@ class ByteTrackDetectorService:
             except Exception as e:
                 self.logger.error(f"Erro ao finalizar landmarks worker: {e}")
         
-        # Finaliza worker FindFace graciosamente
-        if self._findface_queue is not None and self._findface_worker is not None:
-            try:
-                # Para o worker
-                self._findface_worker_running = False
-                
-                # Envia sinal de parada (prioritário - não aguarda fila esvaziar)
-                try:
-                    self._findface_queue.put(None, timeout=0.5)
-                except:
-                    self.logger.warning("Não foi possível enviar sinal de parada para worker FindFace")
-                
-                # Aguarda worker finalizar (timeout curto)
-                self._findface_worker.join(timeout=2.0)
-                
-                if self._findface_worker.is_alive():
-                    self.logger.warning("FindFace worker não finalizou no tempo esperado")
-                else:
-                    self.logger.info("FindFace worker finalizado com sucesso")
-            except Exception as e:
-                self.logger.error(f"Erro ao finalizar FindFace worker: {e}")
+        # NOTA: Workers FindFace são globais (gerenciados em run.py) - não para aqui
         
         self.logger.info(
             f"ByteTrackDetectorService finalizado para câmera "
@@ -809,7 +732,7 @@ class ByteTrackDetectorService:
     def _send_best_event_to_findface(self, track_id: int, event: Event, total_events: int):
         """
         Enfileira o melhor evento do track para envio assíncrono ao FindFace.
-        OTIMIZAÇÃO 8: Usa fila assíncrona para não bloquear thread de detecção.
+        OTIMIZAÇÃO 8: Usa fila global compartilhada processada por pool de workers.
         
         :param track_id: ID do track.
         :param event: Melhor evento do track.
@@ -825,12 +748,21 @@ class ByteTrackDetectorService:
         
         try:
             # Enfileira evento para processamento assíncrono (non-blocking)
-            self._findface_queue.put_nowait((track_id, event, total_events))
-            
-            self.logger.debug(
-                f"Track {track_id} enfileirado para envio FindFace "
-                f"(fila: {self._findface_queue.qsize()}/{self._findface_queue.maxsize})"
+            # Formato: (camera_id, camera_name, track_id, event, total_events)
+            event_data = (
+                self.camera.camera_id.value(),
+                self.camera.camera_name.value(),
+                track_id,
+                event,
+                total_events
             )
+            self._findface_queue.put_nowait(event_data)
+            
+            if self.verbose_log:
+                self.logger.debug(
+                    f"Track {track_id} enfileirado para envio FindFace "
+                    f"(fila global: {self._findface_queue.qsize()}/{self._findface_queue.maxsize})"
+                )
             
         except Exception as e:
             # Fila cheia - descarta evento e loga warning
