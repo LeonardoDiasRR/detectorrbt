@@ -197,10 +197,10 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
                 try:
                     resposta = adapter.send_event(event)
                     
-                    if not resposta:
-                        worker_logger.warning(
-                            f"✗ FindFace - Resposta vazia - Camera {camera_id} Track {track_id}"
-                        )
+                    # if not resposta:
+                    #     worker_logger.warning(
+                    #         f"✗ FindFace - Resposta vazia - Camera {camera_id} Track {track_id}"
+                    #     )
                 except Exception as e:
                     worker_logger.error(
                         f"✗ FindFace - FALHA - Camera {camera_id} Track {track_id}: {e}"
