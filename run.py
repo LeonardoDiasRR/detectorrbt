@@ -202,10 +202,10 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
                             f"✓ FindFace - Melhor face do Track {track_id} enviada com sucesso! "
                             f"Camera: {camera_name} (ID: {camera_id}) | Total de eventos: {total_events}"
                         )
-                    else:
-                        worker_logger.warning(
-                            f"✗ FindFace - Resposta vazia - Camera {camera_name} (ID: {camera_id}) Track {track_id}"
-                        )
+                    # else:
+                    #     worker_logger.warning(
+                    #         f"✗ FindFace - Resposta vazia - Camera {camera_name} (ID: {camera_id}) Track {track_id}"
+                    #     )
                 except Exception as e:
                     worker_logger.error(
                         f"✗ FindFace - FALHA - Camera {camera_name} (ID: {camera_id}) Track {track_id}: {e}"
