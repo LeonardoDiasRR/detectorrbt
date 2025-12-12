@@ -10,10 +10,10 @@ from queue import Queue
 # local
 from src.infrastructure import ConfigLoader, AppSettings
 from src.infrastructure.external.findface_client import create_findface_client
+from src.infrastructure.repositories import CameraRepositoryFindface
+from src.application.use_cases import LoadCamerasUseCase
 from src.domain.adapters import FindfaceAdapter
 from src.domain.services import ByteTrackDetectorService, ImageSaveService
-from src.domain.entities import Camera
-from src.domain.value_objects import IdVO, NameVO, CameraTokenVO, CameraSourceVO
 from src.infrastructure.model import ModelFactory
 from src.infrastructure.model.landmarks_model_factory import LandmarksModelFactory
 
@@ -248,21 +248,12 @@ def main(settings: AppSettings, findface_adapter: FindfaceAdapter):
     
     processors = []
     
-    # Obtém câmeras usando o adapter
-    cameras_ff = findface_adapter.get_cameras()
-    logger.info(f"Total de câmeras obtidas do FindFace: {len(cameras_ff)}")
+    # Obtém câmeras ativas usando DDD (Repository + Use Case)
+    camera_repository = CameraRepositoryFindface(ff, camera_prefix=settings.findface.camera_prefix)
+    load_cameras_use_case = LoadCamerasUseCase(camera_repository, settings)
+    cameras_ff = load_cameras_use_case.execute()
     
-    # Adiciona câmeras extras do config
-    for cam_config in settings.cameras:
-        camera = Camera(
-            camera_id=IdVO(cam_config.id),
-            camera_name=NameVO(cam_config.name),
-            camera_token=CameraTokenVO(cam_config.token),
-            source=CameraSourceVO(cam_config.url)
-        )
-        cameras_ff.append(camera)
-    
-    logger.info(f"Total de {len(cameras_ff)} câmera(s) para processar.")
+    logger.info(f"Total de {len(cameras_ff)} câmera(s) ativas para processar.")
     
     # Obtém lista de GPUs a usar (distribuição round-robin)
     gpu_devices = settings.processing.gpu_devices

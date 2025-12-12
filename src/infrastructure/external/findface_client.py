@@ -2,7 +2,7 @@
 Factory para criar cliente FindFace Multi.
 """
 
-from findface_multi import FindfaceMulti
+from src.infrastructure.clients import FindfaceMulti
 from src.infrastructure.config.settings import FindFaceConfig
 
 

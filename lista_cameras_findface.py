@@ -1,16 +1,16 @@
 """
 Script para listar as câmeras disponíveis no FindFace.
-Utiliza o FindfaceAdapter para obter as câmeras virtuais configuradas.
+Utiliza o padrão Repository (DDD) para obter as câmeras virtuais configuradas.
 """
 
 import logging
-from findface_multi import FindfaceMulti
-from src.domain.adapters.findface_adapter import FindfaceAdapter
+from src.infrastructure.clients import FindfaceMulti
+from src.infrastructure.repositories import CameraRepositoryFindface
 from src.infrastructure.config.config_loader import ConfigLoader
 
 
 def main():
-    """Lista todas as câmeras disponíveis no FindFace."""
+    """Lista todas as câmeras ativas disponíveis no FindFace."""
     
     # Configura logging
     logging.basicConfig(
@@ -37,15 +37,15 @@ def main():
         findface_client.login()
         logger.info("Login realizado com sucesso!")
         
-        # Cria adapter
-        findface_adapter = FindfaceAdapter(
-            findface=findface_client,
+        # Cria repositório de câmeras
+        camera_repository = CameraRepositoryFindface(
+            findface_client=findface_client,
             camera_prefix=settings.findface.camera_prefix
         )
         
-        # Obtém câmeras
-        logger.info(f"Buscando câmeras com prefixo '{settings.findface.camera_prefix}'...")
-        cameras = findface_adapter.get_cameras()
+        # Obtém câmeras ativas
+        logger.info(f"Buscando câmeras ativas com prefixo '{settings.findface.camera_prefix}'...")
+        cameras = camera_repository.get_active_cameras()
         
         # Exibe resultado
         if not cameras:
@@ -61,6 +61,7 @@ def main():
                 print(f"Nome:   {camera.camera_name.value()}")
                 print(f"Token:  {camera.camera_token.value()}")
                 print(f"Source: {camera.source.value()}")
+                print(f"Active: {camera.active}")
         
         # Faz logout
         findface_client.logout()

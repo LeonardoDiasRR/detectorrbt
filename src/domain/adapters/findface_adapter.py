@@ -10,7 +10,7 @@ import json
 import re
 
 # local
-from findface_multi import FindfaceMulti
+from src.infrastructure.clients import FindfaceMulti
 from src.domain.entities import Camera, Event
 from src.domain.value_objects import CameraTokenVO, IdVO, NameVO, CameraSourceVO
 
@@ -37,11 +37,12 @@ class FindfaceAdapter:
         self.camera_prefix = camera_prefix
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def get_cameras(self) -> List[Camera]:
+    def get_cameras(self, active: bool = None) -> List[Camera]:
         """
         Obtém a lista de câmeras virtuais disponíveis no FindFace.
         Retorna entidades Camera do domínio.
 
+        :param active: Filtra câmeras ativas (True) ou inativas (False). None retorna todas.
         :return: Lista de entidades Camera.
         """
         cameras = []
@@ -56,12 +57,18 @@ class FindfaceAdapter:
 
             # Para cada grupo, obtém câmeras
             for grupo in grupos_filtrados:
-                cameras_response = self.findface.get_cameras(
-                    camera_groups=[grupo["id"]],
-                    external_detector=True,
-                    ordering='id',
-                    active=True
-                )["results"]
+                # Prepara parâmetros da chamada
+                params = {
+                    'camera_groups': [grupo["id"]],
+                    'external_detector': True,
+                    'ordering': 'id'
+                }
+                
+                # Adiciona filtro 'active' se informado
+                if active is not None:
+                    params['active'] = active
+                
+                cameras_response = self.findface.get_cameras(**params)["results"]
                 
                 # Filtra câmeras com RTSP no comment
                 cameras_filtradas = [
@@ -75,7 +82,8 @@ class FindfaceAdapter:
                         camera_id=IdVO(camera_data["id"]),
                         camera_name=NameVO(camera_data["name"]),
                         camera_token=CameraTokenVO(camera_data["external_detector_token"]),
-                        source=CameraSourceVO(camera_data["comment"].strip())
+                        source=CameraSourceVO(camera_data["comment"].strip()),
+                        active=camera_data["active"]
                     )
                     cameras.append(camera)
 

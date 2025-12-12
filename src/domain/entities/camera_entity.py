@@ -16,7 +16,8 @@ class Camera:
         camera_id: IdVO,
         camera_name: NameVO,
         camera_token: CameraTokenVO,
-        source: CameraSourceVO
+        source: CameraSourceVO,
+        active: bool = True
     ):
         """
         Inicializa a entidade Camera.
@@ -25,7 +26,8 @@ class Camera:
         :param camera_name: Nome da câmera (NameVO).
         :param camera_token: Token de autenticação da câmera (CameraTokenVO).
         :param source: URL RTSP da câmera (CameraSourceVO).
-        :raises TypeError: Se algum parâmetro não for do tipo Value Object esperado.
+        :param active: Se a câmera está ativa (bool, padrão: True).
+        :raises TypeError: Se algum parâmetro não for do tipo esperado.
         """
         if not isinstance(camera_id, IdVO):
             raise TypeError(f"camera_id deve ser IdVO, recebido: {type(camera_id).__name__}")
@@ -39,10 +41,14 @@ class Camera:
         if not isinstance(source, CameraSourceVO):
             raise TypeError(f"source deve ser CameraSourceVO, recebido: {type(source).__name__}")
         
+        if not isinstance(active, bool):
+            raise TypeError(f"active deve ser bool, recebido: {type(active).__name__}")
+        
         self._camera_id = camera_id
         self._camera_name = camera_name
         self._camera_token = camera_token
         self._source = source
+        self._active = active
 
     @property
     def camera_id(self) -> IdVO:
@@ -64,6 +70,11 @@ class Camera:
         """Retorna a URL RTSP da câmera."""
         return self._source
 
+    @property
+    def active(self) -> bool:
+        """Retorna se a câmera está ativa."""
+        return self._active
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Converte a entidade para um dicionário.
@@ -74,7 +85,8 @@ class Camera:
             'id': self._camera_id.value(),
             'name': self._camera_name.value(),
             'token': self._camera_token.value(),
-            'source': self._source.value()
+            'source': self._source.value(),
+            'active': self._active
         }
 
     @classmethod
@@ -90,7 +102,8 @@ class Camera:
             camera_id=IdVO(data['id']),
             camera_name=NameVO(data['name']),
             camera_token=CameraTokenVO(data['token']),
-            source=CameraSourceVO(data['source'])
+            source=CameraSourceVO(data['source']),
+            active=data.get('active', True)
         )
 
     def __eq__(self, other) -> bool:
