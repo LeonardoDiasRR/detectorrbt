@@ -77,7 +77,7 @@ prefixo_grupo_camera_findface: "TESTE"
 # Otimizações de performance para cenas com muitas faces
 performance:
   # Resolução de inferência (640, 1280). Menor = mais rápido
-  inference_size: 640
+  inference_size: 1280
   # Processa detecções a cada N frames (1 = todos os frames)
   detection_skip_frames: 2
   # Máximo de workers para processamento paralelo (0 = automático)
